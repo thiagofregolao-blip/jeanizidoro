@@ -44,12 +44,21 @@ export default function Navbar() {
           ))}
         </ul>
 
-        <a
-          href="#contato"
-          className="hidden md:inline-flex items-center gap-2 text-sm uppercase tracking-widest border border-gold/40 text-gold px-6 py-3 rounded-full hover:bg-gold hover:text-bg transition-all duration-500"
-        >
-          Orçamento
-        </a>
+        <div className="hidden md:flex items-center gap-3">
+          <a
+            href="/auth"
+            title="Acesso restrito"
+            className="text-[10px] uppercase tracking-[0.3em] text-fg-muted hover:text-gold transition-colors"
+          >
+            ◉ Acesso
+          </a>
+          <a
+            href="#contato"
+            className="inline-flex items-center gap-2 text-sm uppercase tracking-widest border border-gold/40 text-gold px-6 py-3 rounded-full hover:bg-gold hover:text-bg transition-all duration-500"
+          >
+            Orçamento
+          </a>
+        </div>
 
         <button
           onClick={() => setOpen(!open)}

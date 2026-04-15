@@ -1,0 +1,186 @@
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "postgresql"
+}
+
+model User {
+  id           String   @id @default(cuid())
+  email        String   @unique
+  passwordHash String
+  name         String
+  role         Role     @default(OWNER)
+  createdAt    DateTime @default(now())
+}
+
+enum Role {
+  OWNER
+  STAFF
+}
+
+model Contact {
+  id            String         @id @default(cuid())
+  phone         String         @unique
+  name          String?
+  email         String?
+  isVip         Boolean        @default(false)
+  notes         String?
+  conversations Conversation[]
+  leads         Lead[]
+  contracts     Contract[]
+  createdAt     DateTime       @default(now())
+  updatedAt     DateTime       @updatedAt
+}
+
+model Conversation {
+  id        String     @id @default(cuid())
+  contactId String
+  contact   Contact    @relation(fields: [contactId], references: [id], onDelete: Cascade)
+  status    ConvStatus @default(OPEN)
+  aiPaused  Boolean    @default(false)
+  lastMsgAt DateTime   @default(now())
+  messages  Message[]
+  lead      Lead?
+  createdAt DateTime   @default(now())
+
+  @@index([lastMsgAt])
+}
+
+enum ConvStatus {
+  OPEN
+  HANDLED_BY_HUMAN
+  CLOSED
+}
+
+model Message {
+  id             String       @id @default(cuid())
+  conversationId String
+  conversation   Conversation @relation(fields: [conversationId], references: [id], onDelete: Cascade)
+  direction      Direction
+  sender         Sender
+  content        String       @db.Text
+  mediaUrl       String?
+  zapiMessageId  String?      @unique
+  createdAt      DateTime     @default(now())
+
+  @@index([conversationId, createdAt])
+}
+
+enum Direction {
+  IN
+  OUT
+}
+
+enum Sender {
+  CONTACT
+  AI
+  HUMAN
+}
+
+model Lead {
+  id             String       @id @default(cuid())
+  contactId      String
+  contact        Contact      @relation(fields: [contactId], references: [id])
+  conversationId String       @unique
+  conversation   Conversation @relation(fields: [conversationId], references: [id])
+  temperature    Temperature  @default(COLD)
+  status         LeadStatus   @default(NEW)
+  eventType      String?
+  eventDate      DateTime?
+  guestCount     Int?
+  location       String?
+  budget         String?
+  style          String?
+  summary        String?      @db.Text
+  rawData        Json?
+  score          Int          @default(0)
+  createdAt      DateTime     @default(now())
+  updatedAt      DateTime     @updatedAt
+
+  @@index([temperature, status])
+}
+
+enum Temperature {
+  HOT
+  WARM
+  COLD
+}
+
+enum LeadStatus {
+  NEW
+  IN_SERVICE
+  PROPOSAL_SENT
+  CONTRACT_SENT
+  WON
+  LOST
+}
+
+model AiConfig {
+  id               String   @id @default(cuid())
+  personaPrompt    String   @db.Text
+  businessContext  String   @db.Text
+  autoReply        Boolean  @default(true)
+  workStartHour    Int      @default(8)
+  workEndHour      Int      @default(22)
+  escalateKeywords String[] @default([])
+  pauseAll         Boolean  @default(false)
+  updatedAt        DateTime @updatedAt
+}
+
+model Contract {
+  id           String         @id @default(cuid())
+  contactId    String
+  contact      Contact        @relation(fields: [contactId], references: [id])
+  leadId       String?
+  autentiqueId String?        @unique
+  status       ContractStatus @default(DRAFT)
+  pdfUrl       String?
+  signedPdfUrl String?
+  totalValue   Decimal?       @db.Decimal(10, 2)
+  paymentTerms String?
+  services     Json?
+  sentVia      String?
+  sentAt       DateTime?
+  signedAt     DateTime?
+  createdAt    DateTime       @default(now())
+}
+
+enum ContractStatus {
+  DRAFT
+  SENT
+  VIEWED
+  SIGNED
+  CANCELLED
+}
+
+model AvailabilityCache {
+  id       String   @id @default(cuid())
+  date     DateTime @unique
+  isBusy   Boolean  @default(false)
+  source   String   @default("google_calendar")
+  syncedAt DateTime @default(now())
+}
+
+model DailySummary {
+  id          String   @id @default(cuid())
+  date        DateTime @unique
+  totalMsgs   Int      @default(0)
+  newLeads    Int      @default(0)
+  hotLeads    Int      @default(0)
+  summary     String   @db.Text
+  sentToOwner Boolean  @default(false)
+  createdAt   DateTime @default(now())
+}
+
+model WebhookLog {
+  id        String   @id @default(cuid())
+  source    String
+  payload   Json
+  processed Boolean  @default(false)
+  error     String?
+  createdAt DateTime @default(now())
+
+  @@index([source, createdAt])
+}
