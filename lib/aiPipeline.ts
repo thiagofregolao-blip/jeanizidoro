@@ -78,7 +78,8 @@ export async function processInboundMessage(args: {
 
   // escalation keywords
   const lower = text.toLowerCase();
-  if (cfg.escalateKeywords.some((k) => lower.includes(k.toLowerCase()))) {
+  const keywords = (cfg.escalateKeywords as string[]) || [];
+  if (keywords.some((k: string) => lower.includes(k.toLowerCase()))) {
     await prisma.conversation.update({
       where: { id: conv.id },
       data: { status: "HANDLED_BY_HUMAN", aiPaused: true },
