@@ -293,70 +293,74 @@ export async function processInboundMessage(args: {
   // sucesso → reset contador do breaker
   await resetCircuitSuccess();
 
-  // 10. classify + profile (fire-and-forget)
-  (async () => {
-    try {
-      const fullHistory = await prisma.message.findMany({
-        where: { conversationId: conv.id },
-        orderBy: { createdAt: "asc" },
-      });
-      const fullFormatted = fullHistory.map((m) => ({
-        role: (m.direction === "IN" ? "user" : "assistant") as "user" | "assistant",
-        content: m.content,
-      }));
+  // 10. classify + profile (SÍNCRONO pra garantir que o Lead apareça no Kanban)
+  try {
+    console.log(`[PIPELINE] classifying + extracting profile`);
+    const fullHistory = await prisma.message.findMany({
+      where: { conversationId: conv.id },
+      orderBy: { createdAt: "asc" },
+    });
+    const fullFormatted = fullHistory.map((m) => ({
+      role: (m.direction === "IN" ? "user" : "assistant") as "user" | "assistant",
+      content: m.content,
+    }));
 
-      const [extraction, updatedProfile] = await Promise.all([
-        classifyLead(fullFormatted),
-        extractProfileLearnings(fullFormatted, profile),
-      ]);
+    const [extraction, updatedProfile] = await Promise.all([
+      classifyLead(fullFormatted),
+      extractProfileLearnings(fullFormatted, profile),
+    ]);
 
-      await prisma.lead.upsert({
-        where: { conversationId: conv.id },
-        create: {
-          contactId: contact.id,
-          conversationId: conv.id,
-          temperature: extraction.temperature,
-          score: extraction.score,
-          eventType: extraction.eventType,
-          eventDate: extraction.eventDate ? new Date(extraction.eventDate) : null,
-          guestCount: extraction.guestCount,
-          location: extraction.location,
-          budget: extraction.budget,
-          style: extraction.style,
-          summary: extraction.summary,
-          rawData: extraction as object,
-        },
-        update: {
-          temperature: extraction.temperature,
-          score: extraction.score,
-          eventType: extraction.eventType ?? undefined,
-          eventDate: extraction.eventDate ? new Date(extraction.eventDate) : undefined,
-          guestCount: extraction.guestCount ?? undefined,
-          location: extraction.location ?? undefined,
-          budget: extraction.budget ?? undefined,
-          style: extraction.style ?? undefined,
-          summary: extraction.summary,
-          rawData: extraction as object,
-        },
-      });
+    console.log(`[PIPELINE] lead extracted: temp=${extraction.temperature} type=${extraction.eventType} date=${extraction.eventDate}`);
 
-      const profileUpdate: { name?: string; profile?: object } = {};
-      if (extraction.contactName && !contact.name) profileUpdate.name = extraction.contactName;
-      if (updatedProfile) profileUpdate.profile = { ...updatedProfile, detectedTone } as object;
-      if (Object.keys(profileUpdate).length > 0) {
-        await prisma.contact.update({ where: { id: contact.id }, data: profileUpdate });
-      }
+    await prisma.lead.upsert({
+      where: { conversationId: conv.id },
+      create: {
+        contactId: contact.id,
+        conversationId: conv.id,
+        temperature: extraction.temperature,
+        score: extraction.score,
+        eventType: extraction.eventType,
+        eventDate: extraction.eventDate ? new Date(extraction.eventDate) : null,
+        guestCount: extraction.guestCount,
+        location: extraction.location,
+        budget: extraction.budget,
+        style: extraction.style,
+        summary: extraction.summary,
+        rawData: extraction as object,
+      },
+      update: {
+        temperature: extraction.temperature,
+        score: extraction.score,
+        eventType: extraction.eventType ?? undefined,
+        eventDate: extraction.eventDate ? new Date(extraction.eventDate) : undefined,
+        guestCount: extraction.guestCount ?? undefined,
+        location: extraction.location ?? undefined,
+        budget: extraction.budget ?? undefined,
+        style: extraction.style ?? undefined,
+        summary: extraction.summary,
+        rawData: extraction as object,
+      },
+    });
+    console.log(`[PIPELINE] lead upserted for conv=${conv.id}`);
 
-      if (extraction.shouldEscalate) {
-        await prisma.conversation.update({
-          where: { id: conv.id },
-          data: { status: "HANDLED_BY_HUMAN" },
-        });
-      }
-    } catch (e) {
-      await logError("claude:classify_async", e instanceof Error ? e.message : String(e));
+    const profileUpdate: { name?: string; profile?: object } = {};
+    if (extraction.contactName && !contact.name) profileUpdate.name = extraction.contactName;
+    if (updatedProfile) profileUpdate.profile = { ...updatedProfile, detectedTone } as object;
+    if (Object.keys(profileUpdate).length > 0) {
+      await prisma.contact.update({ where: { id: contact.id }, data: profileUpdate });
     }
-  })();
+
+    if (extraction.shouldEscalate) {
+      await prisma.conversation.update({
+        where: { id: conv.id },
+        data: { status: "HANDLED_BY_HUMAN" },
+      });
+    }
+  } catch (e) {
+    const msg = e instanceof Error ? e.message : String(e);
+    console.error(`[PIPELINE] classify FAILED:`, msg);
+    await logError("claude:classify", msg);
+  }
 
   return { ok: true, chunks: chunks.length };
 }
