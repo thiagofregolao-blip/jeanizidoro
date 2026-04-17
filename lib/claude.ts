@@ -34,19 +34,19 @@ export type ContactProfile = {
 
 const CLASSIFY_SCHEMA = `
 {
-  "temperature": "HOT | WARM | COLD",
-  "score": "0-100",
-  "eventType": "casamento | aniversario | corporativo | 15 anos | outro | null",
-  "eventDate": "YYYY-MM-DD ou null",
-  "guestCount": "número ou null",
-  "location": "string ou null",
-  "budget": "string ou null",
-  "style": "string ou null",
-  "contactName": "nome do cliente ou null",
+  "temperature": "HOT" | "WARM" | "COLD",
+  "score": <inteiro de 0 a 100, NUNCA string>,
+  "eventType": "casamento" | "aniversario" | "corporativo" | "15 anos" | "outro" | null,
+  "eventDate": "YYYY-MM-DD" | null,
+  "guestCount": <inteiro ou null, NUNCA string>,
+  "location": "string" | null,
+  "budget": "string" | null,
+  "style": "string" | null,
+  "contactName": "string" | null,
   "summary": "1-2 frases resumindo o lead",
-  "shouldEscalate": "true se cliente pediu falar com humano, reclamou, ou IA não pode ajudar"
+  "shouldEscalate": <boolean, true ou false>
 }
-`;
+IMPORTANTE: score e guestCount DEVEM ser números inteiros JSON (ex: 85, 100), NÃO strings entre aspas.`;
 
 export async function classifyLead(history: { role: "user" | "assistant"; content: string }[]) {
   const lastUserMsgs = history

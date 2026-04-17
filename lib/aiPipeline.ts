@@ -82,6 +82,12 @@ function rand(min: number, max: number) {
   return Math.floor(min + Math.random() * (max - min));
 }
 
+function toInt(v: unknown): number | null {
+  if (v === null || v === undefined || v === "") return null;
+  const n = typeof v === "number" ? v : parseInt(String(v).replace(/\D/g, ""), 10);
+  return Number.isFinite(n) ? n : null;
+}
+
 async function sendChunksSafely(phone: string, chunks: string[], conversationId: string, sender: "AI" | "HUMAN" = "AI") {
   const sent: string[] = [];
   for (let i = 0; i < chunks.length; i++) {
@@ -312,16 +318,21 @@ export async function processInboundMessage(args: {
 
     console.log(`[PIPELINE] lead extracted: temp=${extraction.temperature} type=${extraction.eventType} date=${extraction.eventDate}`);
 
+    const scoreInt = toInt(extraction.score) ?? 0;
+    const guestCountInt = toInt(extraction.guestCount);
+    const eventDateObj = extraction.eventDate ? new Date(extraction.eventDate) : null;
+    const eventDateValid = eventDateObj && !isNaN(eventDateObj.getTime()) ? eventDateObj : null;
+
     await prisma.lead.upsert({
       where: { conversationId: conv.id },
       create: {
         contactId: contact.id,
         conversationId: conv.id,
         temperature: extraction.temperature,
-        score: extraction.score,
+        score: scoreInt,
         eventType: extraction.eventType,
-        eventDate: extraction.eventDate ? new Date(extraction.eventDate) : null,
-        guestCount: extraction.guestCount,
+        eventDate: eventDateValid,
+        guestCount: guestCountInt,
         location: extraction.location,
         budget: extraction.budget,
         style: extraction.style,
@@ -330,10 +341,10 @@ export async function processInboundMessage(args: {
       },
       update: {
         temperature: extraction.temperature,
-        score: extraction.score,
+        score: scoreInt,
         eventType: extraction.eventType ?? undefined,
-        eventDate: extraction.eventDate ? new Date(extraction.eventDate) : undefined,
-        guestCount: extraction.guestCount ?? undefined,
+        eventDate: eventDateValid ?? undefined,
+        guestCount: guestCountInt ?? undefined,
         location: extraction.location ?? undefined,
         budget: extraction.budget ?? undefined,
         style: extraction.style ?? undefined,
