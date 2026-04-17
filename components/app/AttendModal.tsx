@@ -53,7 +53,9 @@ export default function AttendModal({ lead, isNew, onClose, onUpdated }: Props) 
   const [paymentTerms, setPaymentTerms] = useState("");
 
   // Step 3 / 4
-  const [contractStatus, setContractStatus] = useState<"draft" | "sending" | "sent">("draft");
+  const [contractStatus, setContractStatus] = useState<"draft" | "sending" | "sent" | "error">("draft");
+  const [contractResult, setContractResult] = useState<{ id?: string; publicUrl?: string; error?: string } | null>(null);
+  const [sendVia, setSendVia] = useState<"whatsapp" | "email" | "both">("whatsapp");
 
   function toggleService(s: string) {
     setServices((arr) => (arr.includes(s) ? arr.filter((x) => x !== s) : [...arr, s]));
@@ -85,10 +87,39 @@ export default function AttendModal({ lead, isNew, onClose, onUpdated }: Props) 
 
   async function generateContract() {
     setContractStatus("sending");
-    // placeholder — endpoint Autentique virá na fase 3
-    await new Promise((r) => setTimeout(r, 1500));
-    setContractStatus("sent");
-    setStep(4);
+    try {
+      const res = await fetch("/api/contracts", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          contactId: lead?.contact.id,
+          leadId: lead?.id,
+          contactName,
+          contactPhone,
+          eventType,
+          eventDate,
+          guestCount: guestCount ? Number(guestCount) : undefined,
+          location,
+          style,
+          services,
+          totalValue,
+          paymentTerms,
+          sentVia: sendVia,
+        }),
+      });
+      const data = await res.json();
+      if (!res.ok) {
+        setContractStatus("error");
+        setContractResult({ error: data.error || "Erro ao gerar contrato" });
+        return;
+      }
+      setContractResult({ id: data.contract?.id, publicUrl: data.autentique?.publicUrl });
+      setContractStatus("sent");
+      setStep(4);
+    } catch (e) {
+      setContractStatus("error");
+      setContractResult({ error: e instanceof Error ? e.message : "Erro" });
+    }
   }
 
   return (
@@ -238,11 +269,37 @@ export default function AttendModal({ lead, isNew, onClose, onUpdated }: Props) 
                   Enviar via
                 </label>
                 <div className="flex gap-3">
-                  <button className="border border-line px-6 py-3 hover:border-gold transition-colors text-sm">📱 WhatsApp</button>
-                  <button className="border border-line px-6 py-3 hover:border-gold transition-colors text-sm">✉️ Email</button>
-                  <button className="border border-line px-6 py-3 hover:border-gold transition-colors text-sm">📱 + ✉️ Ambos</button>
+                  <button
+                    onClick={() => setSendVia("whatsapp")}
+                    className={`border px-6 py-3 text-sm transition-colors ${
+                      sendVia === "whatsapp" ? "border-gold text-gold bg-gold/5" : "border-line hover:border-gold"
+                    }`}
+                  >
+                    📱 WhatsApp
+                  </button>
+                  <button
+                    onClick={() => setSendVia("email")}
+                    className={`border px-6 py-3 text-sm transition-colors ${
+                      sendVia === "email" ? "border-gold text-gold bg-gold/5" : "border-line hover:border-gold"
+                    }`}
+                  >
+                    ✉️ Email
+                  </button>
+                  <button
+                    onClick={() => setSendVia("both")}
+                    className={`border px-6 py-3 text-sm transition-colors ${
+                      sendVia === "both" ? "border-gold text-gold bg-gold/5" : "border-line hover:border-gold"
+                    }`}
+                  >
+                    📱 + ✉️ Ambos
+                  </button>
                 </div>
               </div>
+              {contractStatus === "error" && contractResult?.error && (
+                <div className="text-sm text-red-400 border border-red-400/30 p-3">
+                  {contractResult.error}
+                </div>
+              )}
 
               <div className="flex justify-between gap-3 pt-4">
                 <button onClick={() => setStep(2)} className="text-xs uppercase tracking-widest text-fg-muted hover:text-gold">
@@ -271,6 +328,18 @@ export default function AttendModal({ lead, isNew, onClose, onUpdated }: Props) 
                 <div className="text-[10px] tracking-[0.3em] uppercase text-gold mb-1">Status</div>
                 <div className="font-display text-xl">Aguardando assinatura</div>
               </div>
+              {contractResult?.publicUrl && (
+                <div className="mt-6">
+                  <a
+                    href={contractResult.publicUrl}
+                    target="_blank"
+                    rel="noopener"
+                    className="text-xs tracking-widest uppercase text-gold hover-underline"
+                  >
+                    Ver link do contrato →
+                  </a>
+                </div>
+              )}
               <div className="mt-10">
                 <button onClick={onUpdated} className="text-xs uppercase tracking-widest text-fg-muted hover:text-gold">
                   Voltar ao painel

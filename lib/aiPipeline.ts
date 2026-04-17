@@ -1,6 +1,27 @@
 import { prisma } from "./prisma";
 import { sendText, setTyping } from "./zapi";
 import { classifyLead, generateReply, detectTone, extractProfileLearnings, type ContactProfile } from "./claude";
+import { getFreeBusy } from "./google";
+
+async function getBusyDaysSummary(): Promise<string> {
+  try {
+    const { busy } = await getFreeBusy(120);
+    if (!busy.length) return "Não há compromissos no Google Calendar nos próximos 120 dias.";
+    const days = new Set<string>();
+    for (const b of busy) {
+      if (!b.start || !b.end) continue;
+      const s = new Date(b.start);
+      const e = new Date(b.end);
+      for (let d = new Date(s); d <= e; d.setDate(d.getDate() + 1)) {
+        days.add(d.toISOString().slice(0, 10));
+      }
+    }
+    const sorted = [...days].sort();
+    return `Datas OCUPADAS no calendar do Jean (NÃO sugerir estas): ${sorted.slice(0, 30).join(", ")}${sorted.length > 30 ? "..." : ""}`;
+  } catch {
+    return "";
+  }
+}
 
 const DEFAULT_PERSONA = `Você é Sofia, recepcionista virtual de Jean Izidoro. Tom acolhedor, elegante, atenta e calorosa. Sempre prioriza entender o cliente antes de oferecer algo. Nunca soa robótica — fala como uma profissional atenciosa conversaria.`;
 const DEFAULT_CONTEXT = `Jean Izidoro é arquiteto e cenógrafo de eventos de alto padrão em São Paulo. Atua há mais de 10 anos com casamentos, eventos corporativos, cenografia autoral e debutantes. Atendimentos comerciais são feitos pessoalmente no escritório do Jean — a Sofia qualifica leads e agenda reuniões.`;
@@ -131,6 +152,9 @@ export async function processInboundMessage(args: {
   // 7. initial micro-delay (2-5s) — tempo pra "ver" a mensagem
   await sleep(rand(2000, 5000));
 
+  // 7.5 consulta agenda em paralelo (non-blocking se falhar)
+  const calendarContext = await getBusyDaysSummary();
+
   // 8. generate reply (pode retornar 1-3 msgs)
   let chunks: string[] = [];
   try {
@@ -142,6 +166,7 @@ export async function processInboundMessage(args: {
       contactProfile: profile,
       detectedTone,
       isFirstInteraction,
+      calendarContext,
     });
   } catch (e) {
     console.error("Claude reply error", e);

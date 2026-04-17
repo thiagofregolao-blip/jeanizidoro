@@ -139,16 +139,20 @@ model Contract {
   contact      Contact        @relation(fields: [contactId], references: [id])
   leadId       String?
   autentiqueId String?        @unique
+  publicUrl    String?
   status       ContractStatus @default(DRAFT)
   pdfUrl       String?
   signedPdfUrl String?
   totalValue   Decimal?       @db.Decimal(10, 2)
   paymentTerms String?
   services     Json?
+  eventData    Json?
   sentVia      String?
   sentAt       DateTime?
+  viewedAt     DateTime?
   signedAt     DateTime?
   createdAt    DateTime       @default(now())
+  updatedAt    DateTime       @updatedAt
 }
 
 enum ContractStatus {
@@ -176,6 +180,28 @@ model DailySummary {
   summary     String   @db.Text
   sentToOwner Boolean  @default(false)
   createdAt   DateTime @default(now())
+}
+
+model GoogleAuth {
+  id           String   @id @default(cuid())
+  email        String   @unique
+  accessToken  String   @db.Text
+  refreshToken String   @db.Text
+  expiresAt    DateTime
+  scope        String   @db.Text
+  calendarId   String   @default("primary")
+  createdAt    DateTime @default(now())
+  updatedAt    DateTime @updatedAt
+}
+
+model ContractTemplate {
+  id        String   @id @default(cuid())
+  name      String
+  isDefault Boolean  @default(false)
+  bodyHtml  String   @db.Text
+  variables String[] @default([])
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
 }
 
 model WebhookLog {

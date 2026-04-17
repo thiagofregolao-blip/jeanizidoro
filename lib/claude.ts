@@ -114,6 +114,7 @@ type GenerateReplyInput = {
   contactProfile?: ContactProfile | null;
   detectedTone?: "formal" | "casual" | "mixed";
   isFirstInteraction?: boolean;
+  calendarContext?: string;
 };
 
 export async function generateReply(input: GenerateReplyInput): Promise<string[]> {
@@ -125,7 +126,12 @@ export async function generateReply(input: GenerateReplyInput): Promise<string[]
     contactProfile,
     detectedTone = "mixed",
     isFirstInteraction = false,
+    calendarContext = "",
   } = input;
+
+  const calendarBlock = calendarContext
+    ? `\n━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━\nAGENDA DO JEAN (use para confirmar disponibilidade)\n━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━\n${calendarContext}\n\nSE o cliente mencionar uma data específica, verifique se está livre antes de animar. Se estiver ocupada, diga algo tipo "deixa eu ver aqui... essa data o Jean já tem compromisso. Você tem flexibilidade pra um fim de semana próximo?" Nunca confirme data como reservada — só o Jean reserva.\n`
+    : "";
 
   const memoryBlock = contactProfile
     ? `
@@ -228,6 +234,7 @@ Extrair, ao longo do bate-papo natural:
 Quando tiver pelo menos 3 desses, ofereça agendar reunião com Jean.
 
 ${memoryBlock}
+${calendarBlock}
 ${firstInteractionNote}
 
 ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
