@@ -58,8 +58,19 @@ async function getOrCreateConfig() {
   return cfg;
 }
 
+function getHourInBR() {
+  return parseInt(
+    new Intl.DateTimeFormat("pt-BR", {
+      timeZone: "America/Sao_Paulo",
+      hour: "2-digit",
+      hour12: false,
+    }).format(new Date()),
+    10
+  );
+}
+
 function isWithinHours(start: number, end: number) {
-  const h = new Date().getHours();
+  const h = getHourInBR();
   return h >= start && h < end;
 }
 
@@ -166,7 +177,7 @@ export async function processInboundMessage(args: {
   if (conv.status === "HANDLED_BY_HUMAN") { console.log("[PIPELINE] skip human"); return { skipped: "human" }; }
   if (!cfg.autoReply) { console.log("[PIPELINE] skip autoReply=false"); return { skipped: "auto_reply_off" }; }
   if (!isWithinHours(cfg.workStartHour, cfg.workEndHour)) {
-    console.log(`[PIPELINE] skip off_hours (cfg=${cfg.workStartHour}-${cfg.workEndHour} now=${new Date().getHours()})`);
+    console.log(`[PIPELINE] skip off_hours (cfg=${cfg.workStartHour}-${cfg.workEndHour} nowBR=${getHourInBR()} utc=${new Date().getHours()})`);
     return { skipped: "off_hours" };
   }
 
