@@ -23,14 +23,17 @@ export default function HealthDashboard() {
   const [errors, setErrors] = useState<ErrorLog[]>([]);
   const [breaker, setBreaker] = useState<Breaker | null>(null);
   const [stats, setStats] = useState<Stat[]>([]);
+  const [webhooks, setWebhooks] = useState<{ id: string; source: string; processed: boolean; error: string | null; createdAt: string; payload: unknown }[]>([]);
   const [loading, setLoading] = useState(true);
 
   async function load() {
-    const res = await fetch("/api/errors");
-    const d = await res.json();
+    const [r1, r2] = await Promise.all([fetch("/api/errors"), fetch("/api/webhook-logs")]);
+    const d = await r1.json();
+    const d2 = await r2.json();
     setErrors(d.errors || []);
     setBreaker(d.breaker || null);
     setStats(d.stats || []);
+    setWebhooks(d2.logs || []);
     setLoading(false);
   }
 
@@ -90,6 +93,43 @@ export default function HealthDashboard() {
               <div key={s.source} className="border border-line p-3 rounded-sm">
                 <div className="text-[10px] uppercase tracking-widest text-fg-muted">{s.source}</div>
                 <div className="font-display text-2xl mt-1">{s._count}</div>
+              </div>
+            ))}
+          </div>
+        )}
+      </div>
+
+      {/* Webhook Logs */}
+      <div className="luxury-glass p-6 rounded-sm">
+        <h3 className="font-display text-2xl mb-4">Webhooks recebidos (últimos 30)</h3>
+        {webhooks.length === 0 ? (
+          <div className="text-fg-muted text-sm border border-red-400/30 p-4 rounded-sm">
+            ⚠️ Nenhum webhook recebido ainda. Confirme que o webhook está salvo no Z-API
+            apontando pra <code className="text-gold">/api/webhook/zapi</code>
+          </div>
+        ) : (
+          <div className="space-y-2 max-h-[400px] overflow-y-auto">
+            {webhooks.map((w) => (
+              <div
+                key={w.id}
+                className={`border p-3 rounded-sm text-xs ${
+                  w.error ? "border-red-400/30" : w.processed ? "border-green-400/30" : "border-line"
+                }`}
+              >
+                <div className="flex items-center justify-between mb-1">
+                  <span className="uppercase tracking-widest text-gold">{w.source}</span>
+                  <span className="text-fg-muted">
+                    {new Date(w.createdAt).toLocaleString("pt-BR")}
+                  </span>
+                </div>
+                {w.error && <div className="text-red-400">erro: {w.error}</div>}
+                {!w.error && w.processed && <div className="text-green-400">processado</div>}
+                <details className="mt-2">
+                  <summary className="text-fg-muted cursor-pointer">payload</summary>
+                  <pre className="text-[10px] text-fg-muted mt-1 overflow-x-auto">
+                    {JSON.stringify(w.payload, null, 2).slice(0, 500)}
+                  </pre>
+                </details>
               </div>
             ))}
           </div>
