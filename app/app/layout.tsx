@@ -18,6 +18,7 @@ export default async function AppLayout({ children }: { children: React.ReactNod
         <NavLink href="/app/contratos">Contratos</NavLink>
         <NavLink href="/app/contatos">Contatos & VIPs</NavLink>
         <NavLink href="/app/ia">Configurar IA</NavLink>
+        <NavLink href="/app/saude">Saúde do Sistema</NavLink>
 
         <div className="mt-auto pt-6 border-t border-line">
           <div className="text-xs text-fg-muted mb-2">{session?.email}</div>

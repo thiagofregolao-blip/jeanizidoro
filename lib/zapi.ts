@@ -1,3 +1,5 @@
+import { retry, withTimeout } from "./reliability";
+
 const BASE = process.env.ZAPI_BASE_URL || "https://api.z-api.io";
 const INSTANCE = process.env.ZAPI_INSTANCE_ID!;
 const TOKEN = process.env.ZAPI_TOKEN!;
@@ -12,39 +14,51 @@ function headers() {
   return h;
 }
 
+async function zapiFetch(path: string, body: object, timeoutMs = 15000) {
+  return retry(
+    () =>
+      withTimeout(
+        (async () => {
+          const res = await fetch(url(path), {
+            method: "POST",
+            headers: headers(),
+            body: JSON.stringify(body),
+          });
+          if (!res.ok) {
+            const t = await res.text().catch(() => "");
+            throw new Error(`Z-API ${path} ${res.status}: ${t.slice(0, 300)}`);
+          }
+          return res.json();
+        })(),
+        timeoutMs,
+        `zapi:${path}`
+      ),
+    { retries: 3, baseDelayMs: 1200, label: `zapi:${path}` }
+  );
+}
+
 export async function sendText(phone: string, message: string) {
-  const res = await fetch(url("/send-text"), {
-    method: "POST",
-    headers: headers(),
-    body: JSON.stringify({ phone, message }),
-  });
-  if (!res.ok) {
-    const t = await res.text();
-    throw new Error(`Z-API send-text falhou: ${res.status} ${t}`);
-  }
-  return res.json();
+  return zapiFetch("/send-text", { phone, message });
 }
 
 export async function sendDocument(phone: string, docUrl: string, fileName: string, caption?: string) {
-  const res = await fetch(url("/send-document/pdf"), {
-    method: "POST",
-    headers: headers(),
-    body: JSON.stringify({ phone, document: docUrl, fileName, caption }),
-  });
-  if (!res.ok) throw new Error(`Z-API send-document falhou: ${res.status}`);
-  return res.json();
+  return zapiFetch("/send-document/pdf", { phone, document: docUrl, fileName, caption });
 }
 
 export async function setTyping(phone: string, durationMs = 2000) {
   try {
-    await fetch(url("/send-chat-state"), {
-      method: "POST",
-      headers: headers(),
-      body: JSON.stringify({ phone, chatState: "composing" }),
-    });
+    await withTimeout(
+      fetch(url("/send-chat-state"), {
+        method: "POST",
+        headers: headers(),
+        body: JSON.stringify({ phone, chatState: "composing" }),
+      }),
+      4000,
+      "zapi:typing"
+    );
     await new Promise((r) => setTimeout(r, durationMs));
   } catch {
-    // ignore
+    // typing is non-critical, silently fail
   }
 }
 

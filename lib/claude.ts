@@ -1,6 +1,9 @@
 import Anthropic from "@anthropic-ai/sdk";
+import { retry, withTimeout } from "./reliability";
 
-export const anthropic = new Anthropic({ apiKey: process.env.ANTHROPIC_API_KEY });
+export const anthropic = new Anthropic({ apiKey: process.env.ANTHROPIC_API_KEY, maxRetries: 0 });
+
+const CLAUDE_TIMEOUT_MS = 25000;
 
 const HAIKU = "claude-haiku-4-5-20251001";
 const SONNET = "claude-sonnet-4-6";
@@ -52,13 +55,16 @@ export async function classifyLead(history: { role: "user" | "assistant"; conten
     .map((m) => m.content)
     .join("\n");
 
-  const res = await anthropic.messages.create({
-    model: HAIKU,
-    max_tokens: 600,
-    system: [
-      {
-        type: "text",
-        text: `Você é um classificador de leads para Jean Izidoro, arquiteto de eventos (casamentos, corporativo, cenografia, 15 anos).
+  const res = await retry(
+    () =>
+      withTimeout(
+        anthropic.messages.create({
+          model: HAIKU,
+          max_tokens: 600,
+          system: [
+            {
+              type: "text",
+              text: `Você é um classificador de leads para Jean Izidoro, arquiteto de eventos (casamentos, corporativo, cenografia, 15 anos).
 Analise a conversa e extraia dados em JSON estrito seguindo o schema:
 ${CLASSIFY_SCHEMA}
 
@@ -68,11 +74,16 @@ Critérios de temperatura:
 - COLD: só perguntou preço genérico, sem dados concretos, ou apenas curiosidade
 
 Retorne SOMENTE o JSON, sem markdown, sem comentários.`,
-        cache_control: { type: "ephemeral" },
-      },
-    ],
-    messages: [{ role: "user", content: `Mensagens do contato:\n${lastUserMsgs}` }],
-  });
+              cache_control: { type: "ephemeral" },
+            },
+          ],
+          messages: [{ role: "user", content: `Mensagens do contato:\n${lastUserMsgs}` }],
+        }),
+        CLAUDE_TIMEOUT_MS,
+        "claude:classify"
+      ),
+    { retries: 2, baseDelayMs: 1500, label: "claude:classify" }
+  );
 
   const txt = res.content[0].type === "text" ? res.content[0].text : "{}";
   const cleaned = txt.replace(/```json\n?/g, "").replace(/```/g, "").trim();
@@ -156,13 +167,16 @@ MEMÓRIA SOBRE ESTE CLIENTE (use com naturalidade, como quem lembra de coisa con
     ? "\n⚠️ Esta é a PRIMEIRA mensagem deste cliente. Apresente-se brevemente como Sofia, assistente do Jean. Não faça perguntas demais de cara."
     : "\nEste cliente JÁ conversou antes. NÃO se apresente de novo. Continue naturalmente.";
 
-  const res = await anthropic.messages.create({
-    model: SONNET,
-    max_tokens: 500,
-    system: [
-      {
-        type: "text",
-        text: `Você é a **Sofia**, assistente virtual do arquiteto Jean Izidoro (eventos de alto padrão: casamentos, corporativo, cenografia, debutantes).
+  const res = await retry(
+    () =>
+      withTimeout(
+        anthropic.messages.create({
+          model: SONNET,
+          max_tokens: 500,
+          system: [
+            {
+              type: "text",
+              text: `Você é a **Sofia**, assistente virtual do arquiteto Jean Izidoro (eventos de alto padrão: casamentos, corporativo, cenografia, debutantes).
 
 ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
 PERSONA (siga rigorosamente)
@@ -242,11 +256,16 @@ FORMATO DA RESPOSTA
 ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
 Retorne APENAS o texto das mensagens, separadas por || quando for mais de uma.
 NÃO use markdown. NÃO explique. NÃO comente.`,
-        cache_control: { type: "ephemeral" },
-      },
-    ],
-    messages: history,
-  });
+              cache_control: { type: "ephemeral" },
+            },
+          ],
+          messages: history,
+        }),
+        CLAUDE_TIMEOUT_MS,
+        "claude:reply"
+      ),
+    { retries: 2, baseDelayMs: 1500, label: "claude:reply" }
+  );
 
   const txt = res.content[0].type === "text" ? res.content[0].text : "";
   const parts = txt

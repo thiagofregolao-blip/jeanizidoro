@@ -1,7 +1,25 @@
 import { prisma } from "./prisma";
 import { sendText, setTyping } from "./zapi";
-import { classifyLead, generateReply, detectTone, extractProfileLearnings, type ContactProfile } from "./claude";
+import {
+  classifyLead,
+  generateReply,
+  detectTone,
+  extractProfileLearnings,
+  type ContactProfile,
+} from "./claude";
 import { getFreeBusy } from "./google";
+import {
+  logError,
+  validateReply,
+  FALLBACK_REPLIES,
+  recordError,
+  resetCircuitSuccess,
+  isCircuitOpen,
+  alertOwner,
+} from "./reliability";
+
+const DEFAULT_PERSONA = `Você é Sofia, recepcionista virtual de Jean Izidoro. Tom acolhedor, elegante, atenta e calorosa. Sempre prioriza entender o cliente antes de oferecer algo. Nunca soa robótica — fala como uma profissional atenciosa conversaria.`;
+const DEFAULT_CONTEXT = `Jean Izidoro é arquiteto e cenógrafo de eventos de alto padrão em São Paulo. Atua há mais de 10 anos com casamentos, eventos corporativos, cenografia autoral e debutantes. Atendimentos comerciais são feitos pessoalmente no escritório do Jean — a Sofia qualifica leads e agenda reuniões.`;
 
 async function getBusyDaysSummary(): Promise<string> {
   try {
@@ -22,9 +40,6 @@ async function getBusyDaysSummary(): Promise<string> {
     return "";
   }
 }
-
-const DEFAULT_PERSONA = `Você é Sofia, recepcionista virtual de Jean Izidoro. Tom acolhedor, elegante, atenta e calorosa. Sempre prioriza entender o cliente antes de oferecer algo. Nunca soa robótica — fala como uma profissional atenciosa conversaria.`;
-const DEFAULT_CONTEXT = `Jean Izidoro é arquiteto e cenógrafo de eventos de alto padrão em São Paulo. Atua há mais de 10 anos com casamentos, eventos corporativos, cenografia autoral e debutantes. Atendimentos comerciais são feitos pessoalmente no escritório do Jean — a Sofia qualifica leads e agenda reuniões.`;
 
 async function getOrCreateConfig() {
   let cfg = await prisma.aiConfig.findFirst();
@@ -56,6 +71,34 @@ function rand(min: number, max: number) {
   return Math.floor(min + Math.random() * (max - min));
 }
 
+async function sendChunksSafely(phone: string, chunks: string[], conversationId: string, sender: "AI" | "HUMAN" = "AI") {
+  const sent: string[] = [];
+  for (let i = 0; i < chunks.length; i++) {
+    const chunk = chunks[i];
+    const typingMs = Math.min(Math.max(chunk.length * 40, 1500), 5000);
+    await setTyping(phone, typingMs);
+    try {
+      const res = await sendText(phone, chunk);
+      await prisma.message.create({
+        data: {
+          conversationId,
+          direction: "OUT",
+          sender,
+          content: chunk,
+          zapiMessageId: res?.messageId ?? null,
+        },
+      });
+      sent.push(chunk);
+    } catch (e) {
+      const msg = e instanceof Error ? e.message : String(e);
+      await logError("zapi:send", msg, { phone, chunk });
+      throw e;
+    }
+    if (i < chunks.length - 1) await sleep(rand(2500, 4500));
+  }
+  return sent;
+}
+
 export async function processInboundMessage(args: {
   phone: string;
   text: string;
@@ -63,6 +106,12 @@ export async function processInboundMessage(args: {
   zapiMessageId?: string;
 }) {
   const { phone, text, senderName, zapiMessageId } = args;
+
+  // 0. circuit breaker check
+  if (await isCircuitOpen()) {
+    await logError("circuit", "circuit open, skipping AI reply", { phone });
+    return { skipped: "circuit_open" };
+  }
 
   // 1. upsert contact
   const existing = await prisma.contact.findUnique({ where: { phone } });
@@ -130,7 +179,6 @@ export async function processInboundMessage(args: {
   const detectedTone = await detectTone(text);
   const profile = (contact.profile as ContactProfile | null) || null;
 
-  // persist tone on contact (most recent wins slightly)
   if (contact.tone !== detectedTone) {
     await prisma.contact.update({
       where: { id: contact.id },
@@ -138,7 +186,7 @@ export async function processInboundMessage(args: {
     });
   }
 
-  // 6. history (últimas 30 msgs)
+  // 6. history
   const history = await prisma.message.findMany({
     where: { conversationId: conv.id },
     orderBy: { createdAt: "asc" },
@@ -149,13 +197,13 @@ export async function processInboundMessage(args: {
     content: m.content,
   }));
 
-  // 7. initial micro-delay (2-5s) — tempo pra "ver" a mensagem
+  // 7. initial micro-delay
   await sleep(rand(2000, 5000));
 
-  // 7.5 consulta agenda em paralelo (non-blocking se falhar)
+  // 7.5 calendar context (non-blocking failure)
   const calendarContext = await getBusyDaysSummary();
 
-  // 8. generate reply (pode retornar 1-3 msgs)
+  // 8. generate reply (with retry + timeout já nos wrappers)
   let chunks: string[] = [];
   try {
     chunks = await generateReply({
@@ -169,43 +217,62 @@ export async function processInboundMessage(args: {
       calendarContext,
     });
   } catch (e) {
-    console.error("Claude reply error", e);
-    return { error: "claude_reply_failed" };
+    const msg = e instanceof Error ? e.message : String(e);
+    await logError("claude:reply", msg, { phone, contactId: contact.id });
+    const breaker = await recordError();
+    if (breaker.tripped) {
+      await alertOwner(
+        `IA foi PAUSADA automaticamente após múltiplos erros. Entre no painel, cheque /app/ia e reative quando resolver.`
+      );
+    } else {
+      await alertOwner(`Erro ao gerar resposta. Último contato: ${phone}. Erro: ${msg.slice(0, 200)}`);
+    }
+    // fallback seguro
+    chunks = [...FALLBACK_REPLIES.aiDown];
   }
 
-  if (chunks.length === 0) return { error: "empty_reply" };
-
-  // 9. enviar cada chunk com delay humanizado entre eles
-  for (let i = 0; i < chunks.length; i++) {
-    const chunk = chunks[i];
-
-    // typing por ~2-4s (proporcional ao tamanho da msg, simulando digitação)
-    const typingMs = Math.min(Math.max(chunk.length * 40, 1500), 5000);
-    await setTyping(phone, typingMs);
-
-    try {
-      const sent = await sendText(phone, chunk);
-      await prisma.message.create({
-        data: {
-          conversationId: conv.id,
-          direction: "OUT",
-          sender: "AI",
-          content: chunk,
-          zapiMessageId: sent?.messageId ?? null,
-        },
-      });
-    } catch (e) {
-      console.error("Z-API send error", e);
-      return { error: "zapi_send_failed" };
-    }
-
-    // delay entre mensagens (se houver próxima)
-    if (i < chunks.length - 1) {
-      await sleep(rand(2500, 4500));
-    }
+  if (chunks.length === 0) {
+    chunks = [...FALLBACK_REPLIES.generic];
   }
 
-  // 10. classify + update profile em paralelo (fire-and-forget)
+  // 8.5 validação anti-alucinação
+  const joined = chunks.join(" ");
+  const validation = validateReply(joined);
+  if (!validation.ok) {
+    await logError("claude:hallucination", validation.reason || "inválida", {
+      phone,
+      content: joined.slice(0, 300),
+    });
+    await alertOwner(
+      `Resposta da IA bloqueada por violação de regra: "${validation.reason}". Conversa: ${phone}. Revisão manual necessária.`
+    );
+    await prisma.conversation.update({
+      where: { id: conv.id },
+      data: { status: "HANDLED_BY_HUMAN", aiPaused: true },
+    });
+    // envia só a confirmação neutra (não arrisca o texto alucinado)
+    chunks = [...FALLBACK_REPLIES.generic];
+  }
+
+  // 9. send
+  try {
+    await sendChunksSafely(phone, chunks, conv.id);
+  } catch (e) {
+    const msg = e instanceof Error ? e.message : String(e);
+    await logError("zapi:send_final", msg, { phone });
+    const breaker = await recordError();
+    if (breaker.tripped) {
+      await alertOwner(`IA PAUSADA automaticamente — falhas consecutivas no Z-API. Cheque sua instância Z-API.`);
+    } else {
+      await alertOwner(`Erro ao enviar resposta pelo Z-API pra ${phone}. Erro: ${msg.slice(0, 200)}`);
+    }
+    return { error: "zapi_send_failed" };
+  }
+
+  // sucesso → reset contador do breaker
+  await resetCircuitSuccess();
+
+  // 10. classify + profile (fire-and-forget)
   (async () => {
     try {
       const fullHistory = await prisma.message.findMany({
@@ -252,21 +319,11 @@ export async function processInboundMessage(args: {
         },
       });
 
-      const profileUpdate: {
-        name?: string;
-        profile?: object;
-      } = {};
-      if (extraction.contactName && !contact.name) {
-        profileUpdate.name = extraction.contactName;
-      }
-      if (updatedProfile) {
-        profileUpdate.profile = { ...updatedProfile, detectedTone } as object;
-      }
+      const profileUpdate: { name?: string; profile?: object } = {};
+      if (extraction.contactName && !contact.name) profileUpdate.name = extraction.contactName;
+      if (updatedProfile) profileUpdate.profile = { ...updatedProfile, detectedTone } as object;
       if (Object.keys(profileUpdate).length > 0) {
-        await prisma.contact.update({
-          where: { id: contact.id },
-          data: profileUpdate,
-        });
+        await prisma.contact.update({ where: { id: contact.id }, data: profileUpdate });
       }
 
       if (extraction.shouldEscalate) {
@@ -276,7 +333,7 @@ export async function processInboundMessage(args: {
         });
       }
     } catch (e) {
-      console.error("Classify/profile error", e);
+      await logError("claude:classify_async", e instanceof Error ? e.message : String(e));
     }
   })();
 

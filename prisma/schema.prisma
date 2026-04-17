@@ -214,3 +214,24 @@ model WebhookLog {
 
   @@index([source, createdAt])
 }
+
+model ErrorLog {
+  id        String   @id @default(cuid())
+  source    String
+  level     String   @default("error")
+  message   String   @db.Text
+  context   Json?
+  resolved  Boolean  @default(false)
+  createdAt DateTime @default(now())
+
+  @@index([createdAt, source])
+  @@index([resolved, createdAt])
+}
+
+model CircuitBreakerState {
+  id          String   @id @default("singleton")
+  errorCount  Int      @default(0)
+  lastError   DateTime?
+  trippedAt   DateTime?
+  updatedAt   DateTime @updatedAt
+}
