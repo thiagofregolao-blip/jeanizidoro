@@ -106,9 +106,11 @@ export async function processInboundMessage(args: {
   zapiMessageId?: string;
 }) {
   const { phone, text, senderName, zapiMessageId } = args;
+  console.log(`[PIPELINE] start phone=${phone} text="${text.slice(0, 50)}" sender=${senderName}`);
 
   // 0. circuit breaker check
   if (await isCircuitOpen()) {
+    console.log(`[PIPELINE] circuit_open`);
     await logError("circuit", "circuit open, skipping AI reply", { phone });
     return { skipped: "circuit_open" };
   }
@@ -158,12 +160,15 @@ export async function processInboundMessage(args: {
   const cfg = await getOrCreateConfig();
 
   // 4. guards
-  if (contact.isVip) return { skipped: "vip" };
-  if (cfg.pauseAll) return { skipped: "global_pause" };
-  if (conv.aiPaused) return { skipped: "conv_pause" };
-  if (conv.status === "HANDLED_BY_HUMAN") return { skipped: "human" };
-  if (!cfg.autoReply) return { skipped: "auto_reply_off" };
-  if (!isWithinHours(cfg.workStartHour, cfg.workEndHour)) return { skipped: "off_hours" };
+  if (contact.isVip) { console.log("[PIPELINE] skip vip"); return { skipped: "vip" }; }
+  if (cfg.pauseAll) { console.log("[PIPELINE] skip pauseAll"); return { skipped: "global_pause" }; }
+  if (conv.aiPaused) { console.log("[PIPELINE] skip aiPaused"); return { skipped: "conv_pause" }; }
+  if (conv.status === "HANDLED_BY_HUMAN") { console.log("[PIPELINE] skip human"); return { skipped: "human" }; }
+  if (!cfg.autoReply) { console.log("[PIPELINE] skip autoReply=false"); return { skipped: "auto_reply_off" }; }
+  if (!isWithinHours(cfg.workStartHour, cfg.workEndHour)) {
+    console.log(`[PIPELINE] skip off_hours (cfg=${cfg.workStartHour}-${cfg.workEndHour} now=${new Date().getHours()})`);
+    return { skipped: "off_hours" };
+  }
 
   const keywords = (cfg.escalateKeywords as string[]) || [];
   const lower = text.toLowerCase();
@@ -204,6 +209,7 @@ export async function processInboundMessage(args: {
   const calendarContext = await getBusyDaysSummary();
 
   // 8. generate reply (with retry + timeout já nos wrappers)
+  console.log(`[PIPELINE] calling claude, tone=${detectedTone}, firstInteraction=${isFirstInteraction}`);
   let chunks: string[] = [];
   try {
     chunks = await generateReply({
@@ -218,6 +224,7 @@ export async function processInboundMessage(args: {
     });
   } catch (e) {
     const msg = e instanceof Error ? e.message : String(e);
+    console.error(`[PIPELINE] claude FAILED:`, msg);
     await logError("claude:reply", msg, { phone, contactId: contact.id });
     const breaker = await recordError();
     if (breaker.tripped) {
@@ -254,11 +261,14 @@ export async function processInboundMessage(args: {
     chunks = [...FALLBACK_REPLIES.generic];
   }
 
+  console.log(`[PIPELINE] sending ${chunks.length} chunks`);
   // 9. send
   try {
     await sendChunksSafely(phone, chunks, conv.id);
+    console.log(`[PIPELINE] sent OK`);
   } catch (e) {
     const msg = e instanceof Error ? e.message : String(e);
+    console.error(`[PIPELINE] zapi send FAILED:`, msg);
     await logError("zapi:send_final", msg, { phone });
     const breaker = await recordError();
     if (breaker.tripped) {
