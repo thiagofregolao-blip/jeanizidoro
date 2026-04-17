@@ -27,6 +27,10 @@ model Contact {
   email         String?
   isVip         Boolean        @default(false)
   notes         String?
+  profile       Json?
+  tone          String?
+  firstMsgAt    DateTime?
+  lastSeenAt    DateTime?
   conversations Conversation[]
   leads         Lead[]
   contracts     Contract[]
