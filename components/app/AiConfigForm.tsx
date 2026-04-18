@@ -11,6 +11,8 @@ type Cfg = {
   workStartHour: number;
   workEndHour: number;
   escalateKeywords: string[];
+  offHoursAutoReply: boolean;
+  offHoursMessage: string;
 };
 
 export default function AiConfigForm() {
@@ -88,7 +90,33 @@ export default function AiConfigForm() {
             />
           </div>
         </div>
-        <p className="text-xs text-fg-muted mt-3">Fora desse horário a IA não responde (você ainda recebe).</p>
+        <p className="text-xs text-fg-muted mt-3">Fora desse horário a Sofia não conduz conversas, mas pode enviar auto-resposta (configure abaixo).</p>
+      </section>
+
+      <section className="luxury-glass p-6 rounded-sm">
+        <h3 className="font-display text-2xl mb-4">Auto-resposta fora do horário</h3>
+        <div className="space-y-4">
+          <Toggle
+            label="Enviar mensagem automática quando cliente contatar fora do horário"
+            checked={cfg.offHoursAutoReply}
+            onChange={(v) => set("offHoursAutoReply", v)}
+          />
+          <div>
+            <label className="block text-[10px] uppercase tracking-widest text-fg-muted mb-2">
+              Mensagem automática
+            </label>
+            <textarea
+              rows={3}
+              value={cfg.offHoursMessage}
+              onChange={(e) => set("offHoursMessage", e.target.value)}
+              className="w-full bg-transparent border border-line p-3 outline-none focus:border-gold text-sm"
+              placeholder="Oi! Recebi sua mensagem 💫 Nosso horário é das 8h às 22h..."
+            />
+            <p className="text-xs text-fg-muted mt-2">
+              Cooldown de 4h: se o mesmo cliente mandar várias mensagens seguidas, só recebe a auto-resposta uma vez.
+            </p>
+          </div>
+        </div>
       </section>
 
       <section className="luxury-glass p-6 rounded-sm">

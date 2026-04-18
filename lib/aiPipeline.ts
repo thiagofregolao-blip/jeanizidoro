@@ -211,8 +211,94 @@ export async function processInboundMessage(args: {
   if (conv.status === "HANDLED_BY_HUMAN") { console.log("[PIPELINE] skip human"); return { skipped: "human" }; }
   if (!cfg.autoReply) { console.log("[PIPELINE] skip autoReply=false"); return { skipped: "auto_reply_off" }; }
   if (!isWithinHours(cfg.workStartHour, cfg.workEndHour)) {
-    console.log(`[PIPELINE] skip off_hours (cfg=${cfg.workStartHour}-${cfg.workEndHour} nowBR=${getHourInBR()} utc=${new Date().getHours()})`);
-    return { skipped: "off_hours" };
+    console.log(`[PIPELINE] off_hours (cfg=${cfg.workStartHour}-${cfg.workEndHour} nowBR=${getHourInBR()} utc=${new Date().getHours()})`);
+
+    // Auto-resposta fora do horário (com cooldown 4h pra não spammar)
+    if (cfg.offHoursAutoReply && !!cfg.offHoursMessage) {
+      const lastOut = await prisma.message.findFirst({
+        where: { conversationId: conv.id, direction: "OUT" },
+        orderBy: { createdAt: "desc" },
+      });
+      const lastOutMinsAgo = lastOut
+        ? (Date.now() - new Date(lastOut.createdAt).getTime()) / 60000
+        : Infinity;
+
+      if (lastOutMinsAgo > 240) {
+        // > 4h desde a última resposta nossa → envia auto-resposta
+        try {
+          await sleep(rand(3000, 8000));
+          await setTyping(phone, 2000);
+          const sent = await sendText(phone, cfg.offHoursMessage);
+          await prisma.message.create({
+            data: {
+              conversationId: conv.id,
+              direction: "OUT",
+              sender: "AI",
+              content: cfg.offHoursMessage,
+              zapiMessageId: sent?.messageId ?? null,
+            },
+          });
+          console.log(`[PIPELINE] off_hours auto-reply enviada`);
+        } catch (e) {
+          const msg = e instanceof Error ? e.message : String(e);
+          await logError("zapi:off_hours_reply", msg);
+        }
+      } else {
+        console.log(`[PIPELINE] off_hours auto-reply skipped (última msg out há ${Math.round(lastOutMinsAgo)}min)`);
+      }
+    }
+
+    // Mesmo fora do horário, classifica o lead pra aparecer no Kanban
+    try {
+      const fullHistory = await prisma.message.findMany({
+        where: { conversationId: conv.id },
+        orderBy: { createdAt: "asc" },
+      });
+      const fullFormatted = fullHistory.map((m) => ({
+        role: (m.direction === "IN" ? "user" : "assistant") as "user" | "assistant",
+        content: m.content,
+      }));
+      const extraction = await classifyLead(fullFormatted);
+      const scoreInt = toInt(extraction.score) ?? 0;
+      const guestCountInt = toInt(extraction.guestCount);
+      const eventDateObj = extraction.eventDate ? new Date(extraction.eventDate) : null;
+      const eventDateValid = eventDateObj && !isNaN(eventDateObj.getTime()) ? eventDateObj : null;
+
+      await prisma.lead.upsert({
+        where: { conversationId: conv.id },
+        create: {
+          contactId: contact.id,
+          conversationId: conv.id,
+          temperature: extraction.temperature,
+          score: scoreInt,
+          eventType: extraction.eventType,
+          eventDate: eventDateValid,
+          guestCount: guestCountInt,
+          location: extraction.location,
+          budget: extraction.budget,
+          style: extraction.style,
+          summary: extraction.summary,
+          rawData: extraction as object,
+        },
+        update: {
+          temperature: extraction.temperature,
+          score: scoreInt,
+          eventType: extraction.eventType ?? undefined,
+          eventDate: eventDateValid ?? undefined,
+          guestCount: guestCountInt ?? undefined,
+          location: extraction.location ?? undefined,
+          budget: extraction.budget ?? undefined,
+          style: extraction.style ?? undefined,
+          summary: extraction.summary,
+          rawData: extraction as object,
+        },
+      });
+      console.log(`[PIPELINE] off_hours lead classificado: ${extraction.temperature}`);
+    } catch (e) {
+      await logError("off_hours:classify", e instanceof Error ? e.message : String(e));
+    }
+
+    return { skipped: "off_hours", autoReplyed: true };
   }
 
   const keywords = (cfg.escalateKeywords as string[]) || [];
@@ -404,10 +490,11 @@ export async function processInboundMessage(args: {
     }
 
     if (extraction.shouldEscalate) {
-      await prisma.conversation.update({
-        where: { id: conv.id },
-        data: { status: "HANDLED_BY_HUMAN" },
-      });
+      // IA continua ativa. Só notifica o Jean que o cliente pode precisar de atenção direta.
+      console.log(`[PIPELINE] shouldEscalate=true — avisando Jean sem pausar Sofia`);
+      await alertOwner(
+        `Lead pedindo atenção especial: ${contact.name || phone}\n\nResumo: ${extraction.summary}\n\nA Sofia continua respondendo, mas pode ser bom você assumir pelo celular.`
+      );
     }
   } catch (e) {
     const msg = e instanceof Error ? e.message : String(e);

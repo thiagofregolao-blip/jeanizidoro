@@ -43,6 +43,8 @@ export async function PATCH(req: NextRequest) {
       workStartHour: body.workStartHour,
       workEndHour: body.workEndHour,
       escalateKeywords: body.escalateKeywords,
+      offHoursAutoReply: body.offHoursAutoReply,
+      offHoursMessage: body.offHoursMessage,
     },
   });
   return NextResponse.json({ config: updated });

@@ -10,13 +10,23 @@ export async function POST(req: NextRequest) {
   } catch {
     return NextResponse.json({ error: "unauthorized" }, { status: 401 });
   }
-  const { phone } = await req.json();
+  const body = await req.json();
+  const phone = body.phone as string | undefined;
   if (!phone) return NextResponse.json({ error: "phone required" }, { status: 400 });
 
   const contact = await prisma.contact.findUnique({ where: { phone } });
   if (!contact) return NextResponse.json({ ok: true, skipped: "not_found" });
 
-  // cascata delete via onDelete: Cascade nas conversas e messages
+  // Modo "unlock": só reativa IA sem apagar histórico
+  if (body.mode === "unlock") {
+    await prisma.conversation.updateMany({
+      where: { contactId: contact.id },
+      data: { aiPaused: false, aiPausedUntil: null, status: "OPEN" },
+    });
+    return NextResponse.json({ ok: true, unlocked: contact.phone });
+  }
+
+  // Modo default: apaga tudo (cascata delete)
   await prisma.contact.delete({ where: { id: contact.id } });
   return NextResponse.json({ ok: true, deleted: contact.phone });
 }

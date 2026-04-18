@@ -44,8 +44,21 @@ const CLASSIFY_SCHEMA = `
   "style": "string" | null,
   "contactName": "string" | null,
   "summary": "1-2 frases resumindo o lead",
-  "shouldEscalate": <boolean, true ou false>
+  "shouldEscalate": <boolean>
 }
+
+CRITÉRIOS DE shouldEscalate (seja CONSERVADOR — default é false):
+- true APENAS se o cliente:
+  * PEDIU EXPLICITAMENTE falar com humano/atendente/"falar com Jean"
+  * Está reclamando, irritado ou insatisfeito
+  * Fez pergunta técnica que só Jean pode responder (ex: projetos passados, assinatura, casos específicos)
+- false em TODOS os outros casos, incluindo:
+  * Cliente querendo agendar reunião (a Sofia já faz isso)
+  * Cliente confirmando interesse
+  * Cliente dando informações do evento
+  * Cliente dizendo "vamos agendar", "ok", "perfeito"
+  * Cliente fazendo pergunta normal de orçamento/prazo
+
 IMPORTANTE: score e guestCount DEVEM ser números inteiros JSON (ex: 85, 100), NÃO strings entre aspas.`;
 
 export async function classifyLead(history: { role: "user" | "assistant"; content: string }[]) {

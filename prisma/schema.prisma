@@ -125,15 +125,17 @@ enum LeadStatus {
 }
 
 model AiConfig {
-  id               String   @id @default(cuid())
-  personaPrompt    String   @db.Text
-  businessContext  String   @db.Text
-  autoReply        Boolean  @default(true)
-  workStartHour    Int      @default(8)
-  workEndHour      Int      @default(22)
-  escalateKeywords String[] @default([])
-  pauseAll         Boolean  @default(false)
-  updatedAt        DateTime @updatedAt
+  id                String   @id @default(cuid())
+  personaPrompt     String   @db.Text
+  businessContext   String   @db.Text
+  autoReply         Boolean  @default(true)
+  workStartHour     Int      @default(8)
+  workEndHour       Int      @default(22)
+  escalateKeywords  String[] @default([])
+  pauseAll          Boolean  @default(false)
+  offHoursAutoReply Boolean  @default(true)
+  offHoursMessage   String   @db.Text @default("Oi! Recebi sua mensagem 💫 Nosso horário de atendimento é das 8h às 22h. Te respondo com toda atenção amanhã de manhã ✨")
+  updatedAt         DateTime @updatedAt
 }
 
 model Contract {
