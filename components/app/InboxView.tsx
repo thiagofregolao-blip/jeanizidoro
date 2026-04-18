@@ -25,6 +25,7 @@ export default function InboxView() {
   const [text, setText] = useState("");
   const [sending, setSending] = useState(false);
   const [aiPaused, setAiPaused] = useState(false);
+  const [aiPausedUntil, setAiPausedUntil] = useState<string | null>(null);
   const scrollRef = useRef<HTMLDivElement>(null);
 
   async function loadLeads() {
@@ -38,6 +39,7 @@ export default function InboxView() {
     setMessages(d.conversation?.messages || []);
     setContact(d.conversation?.contact || null);
     setAiPaused(!!d.conversation?.aiPaused);
+    setAiPausedUntil(d.conversation?.aiPausedUntil || null);
     setTimeout(() => scrollRef.current?.scrollTo(0, scrollRef.current.scrollHeight), 50);
   }
 
@@ -63,14 +65,23 @@ export default function InboxView() {
     loadConv(active);
   }
 
-  async function toggleAi() {
+  async function doAction(action: "resume_now" | "pause_indefinitely" | "pause_hours", hours?: number) {
     if (!active) return;
     await fetch(`/api/conversations/${active}`, {
       method: "PATCH",
       headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ aiPaused: !aiPaused, status: !aiPaused ? "HANDLED_BY_HUMAN" : "OPEN" }),
+      body: JSON.stringify({ action, hours }),
     });
-    setAiPaused(!aiPaused);
+    loadConv(active);
+  }
+
+  function pauseRemainingText(): string | null {
+    if (!aiPausedUntil) return null;
+    const ms = new Date(aiPausedUntil).getTime() - Date.now();
+    if (ms <= 0) return null;
+    const mins = Math.round(ms / 60000);
+    if (mins < 60) return `${mins}min`;
+    return `${Math.floor(mins / 60)}h ${mins % 60}min`;
   }
 
   return (
@@ -111,14 +122,36 @@ export default function InboxView() {
                 <div className="font-display text-xl">{contact?.name || contact?.phone}</div>
                 <div className="text-xs text-fg-muted">{contact?.phone}</div>
               </div>
-              <button
-                onClick={toggleAi}
-                className={`text-xs uppercase tracking-widest border px-4 py-2 transition-colors ${
-                  aiPaused ? "border-gold text-gold" : "border-line text-fg-muted"
-                }`}
-              >
-                {aiPaused ? "Retomar IA" : "Pausar IA"}
-              </button>
+              <div className="flex gap-2 flex-wrap">
+                {aiPaused ? (
+                  <>
+                    <span className="text-[10px] tracking-widest uppercase text-gold px-3 py-2 self-center">
+                      🛑 IA pausada{pauseRemainingText() ? ` · volta em ${pauseRemainingText()}` : ""}
+                    </span>
+                    <button
+                      onClick={() => doAction("resume_now")}
+                      className="text-[10px] uppercase tracking-widest border border-gold text-gold hover:bg-gold/10 px-3 py-2 transition-colors"
+                    >
+                      ▶ Retomar agora
+                    </button>
+                  </>
+                ) : (
+                  <>
+                    <button
+                      onClick={() => doAction("pause_hours", 4)}
+                      className="text-[10px] uppercase tracking-widest border border-line text-fg-muted hover:border-gold px-3 py-2 transition-colors"
+                    >
+                      ⏱ Pausar 4h
+                    </button>
+                    <button
+                      onClick={() => doAction("pause_indefinitely")}
+                      className="text-[10px] uppercase tracking-widest border border-line text-fg-muted hover:border-gold px-3 py-2 transition-colors"
+                    >
+                      🔒 Pausar
+                    </button>
+                  </>
+                )}
+              </div>
             </div>
             <div ref={scrollRef} className="flex-1 overflow-y-auto p-6 space-y-3">
               {messages.map((m) => (

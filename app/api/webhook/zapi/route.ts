@@ -55,15 +55,19 @@ export async function POST(req: NextRequest) {
                 zapiMessageId: payload.messageId ?? null,
               },
             });
+            const now = new Date();
+            const pausedUntil = new Date(now.getTime() + 4 * 3600 * 1000); // 4 horas
             await prisma.conversation.update({
               where: { id: conv.id },
               data: {
-                lastMsgAt: new Date(),
+                lastMsgAt: now,
                 status: "HANDLED_BY_HUMAN",
                 aiPaused: true,
+                aiPausedUntil: pausedUntil,
+                humanTakeoverAt: now,
               },
             });
-            console.log(`[WEBHOOK] Jean respondeu direto pelo WA, IA pausada para conv=${conv.id}`);
+            console.log(`[WEBHOOK] Jean assumiu conv=${conv.id}, IA pausada até ${pausedUntil.toISOString()}`);
           }
         }
       }

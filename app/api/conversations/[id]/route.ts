@@ -60,12 +60,32 @@ export async function PATCH(req: NextRequest, ctx: { params: Promise<{ id: strin
   }
   const { id } = await ctx.params;
   const body = await req.json();
-  const conv = await prisma.conversation.update({
-    where: { id },
-    data: {
-      status: body.status,
-      aiPaused: body.aiPaused,
-    },
-  });
+
+  type UpdateData = {
+    status?: "OPEN" | "HANDLED_BY_HUMAN" | "CLOSED";
+    aiPaused?: boolean;
+    aiPausedUntil?: Date | null;
+  };
+  const data: UpdateData = {};
+  if (body.status !== undefined) data.status = body.status;
+  if (body.aiPaused !== undefined) data.aiPaused = body.aiPaused;
+
+  // Action explícita pelo frontend
+  if (body.action === "resume_now") {
+    data.aiPaused = false;
+    data.aiPausedUntil = null;
+    data.status = "OPEN";
+  } else if (body.action === "pause_indefinitely") {
+    data.aiPaused = true;
+    data.aiPausedUntil = null;
+    data.status = "HANDLED_BY_HUMAN";
+  } else if (body.action === "pause_hours") {
+    const hours = Number(body.hours) || 4;
+    data.aiPaused = true;
+    data.aiPausedUntil = new Date(Date.now() + hours * 3600 * 1000);
+    data.status = "HANDLED_BY_HUMAN";
+  }
+
+  const conv = await prisma.conversation.update({ where: { id }, data });
   return NextResponse.json({ conversation: conv });
 }

@@ -7,7 +7,7 @@ import {
   extractProfileLearnings,
   type ContactProfile,
 } from "./claude";
-import { getFreeBusy } from "./google";
+import { getFreeBusy, listUpcomingEvents } from "./google";
 import {
   logError,
   validateReply,
@@ -21,10 +21,10 @@ import {
 const DEFAULT_PERSONA = `Você é Sofia, recepcionista virtual de Jean Izidoro. Tom acolhedor, elegante, atenta e calorosa. Sempre prioriza entender o cliente antes de oferecer algo. Nunca soa robótica — fala como uma profissional atenciosa conversaria.`;
 const DEFAULT_CONTEXT = `Jean Izidoro é arquiteto e cenógrafo de eventos de alto padrão em São Paulo. Atua há mais de 10 anos com casamentos, eventos corporativos, cenografia autoral e debutantes. Atendimentos comerciais são feitos pessoalmente no escritório do Jean — a Sofia qualifica leads e agenda reuniões.`;
 
-async function getBusyDaysSummary(): Promise<string> {
+async function getCalendarContext(): Promise<string> {
   try {
-    const { busy } = await getFreeBusy(120);
-    if (!busy.length) return "Não há compromissos no Google Calendar nos próximos 120 dias.";
+    const [{ busy }, events] = await Promise.all([getFreeBusy(120), listUpcomingEvents(60)]);
+
     const days = new Set<string>();
     for (const b of busy) {
       if (!b.start || !b.end) continue;
@@ -34,8 +34,20 @@ async function getBusyDaysSummary(): Promise<string> {
         days.add(d.toISOString().slice(0, 10));
       }
     }
-    const sorted = [...days].sort();
-    return `Datas OCUPADAS no calendar do Jean (NÃO sugerir estas): ${sorted.slice(0, 30).join(", ")}${sorted.length > 30 ? "..." : ""}`;
+
+    const busyLine = days.size
+      ? `Datas OCUPADAS (não sugerir): ${[...days].sort().slice(0, 30).join(", ")}${days.size > 30 ? "..." : ""}`
+      : "Agenda livre nos próximos 120 dias.";
+
+    const eventLines =
+      events.slice(0, 8).map((e) => {
+        const start = e.start?.dateTime || e.start?.date;
+        if (!start) return null;
+        const d = new Date(start);
+        return `• ${d.toLocaleDateString("pt-BR", { day: "2-digit", month: "short", year: "numeric" })} — ${e.summary || "(sem título)"}`;
+      }).filter(Boolean).join("\n") || "(nenhum próximo)";
+
+    return `${busyLine}\n\nPróximos compromissos do Jean:\n${eventLines}`;
   } catch {
     return "";
   }
@@ -176,10 +188,26 @@ export async function processInboundMessage(args: {
 
   const cfg = await getOrCreateConfig();
 
+  // 3.5 Checa se pausa temporária expirou → reativa automaticamente
+  if (conv.aiPausedUntil && conv.aiPausedUntil.getTime() <= Date.now()) {
+    console.log(`[PIPELINE] pausa expirou para conv=${conv.id}, reativando IA`);
+    await prisma.conversation.update({
+      where: { id: conv.id },
+      data: { aiPaused: false, aiPausedUntil: null, status: "OPEN" },
+    });
+    conv.aiPaused = false;
+    conv.aiPausedUntil = null;
+    conv.status = "OPEN";
+  }
+
   // 4. guards
   if (contact.isVip) { console.log("[PIPELINE] skip vip"); return { skipped: "vip" }; }
   if (cfg.pauseAll) { console.log("[PIPELINE] skip pauseAll"); return { skipped: "global_pause" }; }
-  if (conv.aiPaused) { console.log("[PIPELINE] skip aiPaused"); return { skipped: "conv_pause" }; }
+  if (conv.aiPaused) {
+    const remaining = conv.aiPausedUntil ? Math.round((conv.aiPausedUntil.getTime() - Date.now()) / 60000) : null;
+    console.log(`[PIPELINE] skip aiPaused (volta em ${remaining ?? "permanente"} min)`);
+    return { skipped: "conv_pause" };
+  }
   if (conv.status === "HANDLED_BY_HUMAN") { console.log("[PIPELINE] skip human"); return { skipped: "human" }; }
   if (!cfg.autoReply) { console.log("[PIPELINE] skip autoReply=false"); return { skipped: "auto_reply_off" }; }
   if (!isWithinHours(cfg.workStartHour, cfg.workEndHour)) {
@@ -208,22 +236,35 @@ export async function processInboundMessage(args: {
     });
   }
 
-  // 6. history
+  // 6. history — pega mais se teve takeover humano (pra não perder contexto)
+  const hadHumanTakeover = !!conv.humanTakeoverAt;
   const history = await prisma.message.findMany({
     where: { conversationId: conv.id },
     orderBy: { createdAt: "asc" },
-    take: 30,
+    take: hadHumanTakeover ? 60 : 30,
   });
-  const formatted = history.map((m) => ({
-    role: (m.direction === "IN" ? "user" : "assistant") as "user" | "assistant",
-    content: m.content,
-  }));
+  // Anota quem escreveu cada msg pro Claude distinguir Jean de Sofia
+  const formatted = history.map((m) => {
+    let content = m.content;
+    if (m.direction === "OUT" && m.sender === "HUMAN") {
+      content = `[JEAN (o dono) respondeu pessoalmente]: ${m.content}`;
+    }
+    return {
+      role: (m.direction === "IN" ? "user" : "assistant") as "user" | "assistant",
+      content,
+    };
+  });
+
+  // Contexto extra pra Sofia entender que o Jean já esteve na conversa
+  const resumeAfterHumanContext = hadHumanTakeover
+    ? `\n⚠️ ATENÇÃO: o JEAN (dono do negócio) respondeu pessoalmente nesta conversa em ${conv.humanTakeoverAt?.toLocaleString("pt-BR", { timeZone: "America/Sao_Paulo" })}. Suas mensagens estão marcadas com [JEAN respondeu pessoalmente]. ANALISE O QUE ELE DISSE e continue a partir dali. NÃO repita informações que o Jean já passou. NÃO contradiga o que ele combinou. Se ele marcou uma reunião, você NÃO remarca. Se ele combinou valor, você NÃO fala de outro. Seu papel agora é COMPLEMENTAR o que o Jean já fez.`
+    : "";
 
   // 7. initial micro-delay
   await sleep(rand(2000, 5000));
 
   // 7.5 calendar context (non-blocking failure)
-  const calendarContext = await getBusyDaysSummary();
+  const calendarContext = await getCalendarContext();
 
   // 8. generate reply (with retry + timeout já nos wrappers)
   console.log(`[PIPELINE] calling claude, tone=${detectedTone}, firstInteraction=${isFirstInteraction}`);
@@ -238,6 +279,7 @@ export async function processInboundMessage(args: {
       detectedTone,
       isFirstInteraction,
       calendarContext,
+      humanTakeoverContext: resumeAfterHumanContext,
     });
   } catch (e) {
     const msg = e instanceof Error ? e.message : String(e);

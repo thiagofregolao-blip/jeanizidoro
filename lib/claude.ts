@@ -126,6 +126,7 @@ type GenerateReplyInput = {
   detectedTone?: "formal" | "casual" | "mixed";
   isFirstInteraction?: boolean;
   calendarContext?: string;
+  humanTakeoverContext?: string;
 };
 
 export async function generateReply(input: GenerateReplyInput): Promise<string[]> {
@@ -138,6 +139,7 @@ export async function generateReply(input: GenerateReplyInput): Promise<string[]
     detectedTone = "mixed",
     isFirstInteraction = false,
     calendarContext = "",
+    humanTakeoverContext = "",
   } = input;
 
   const calendarBlock = calendarContext
@@ -260,6 +262,7 @@ Quando tiver pelo menos 3 desses, ofereça agendar reunião com Jean.
 
 ${memoryBlock}
 ${calendarBlock}
+${humanTakeoverContext}
 ${firstInteractionNote}
 
 ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━

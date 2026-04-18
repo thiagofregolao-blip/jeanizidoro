@@ -39,17 +39,20 @@ model Contact {
 }
 
 model Conversation {
-  id        String     @id @default(cuid())
-  contactId String
-  contact   Contact    @relation(fields: [contactId], references: [id], onDelete: Cascade)
-  status    ConvStatus @default(OPEN)
-  aiPaused  Boolean    @default(false)
-  lastMsgAt DateTime   @default(now())
-  messages  Message[]
-  lead      Lead?
-  createdAt DateTime   @default(now())
+  id             String     @id @default(cuid())
+  contactId      String
+  contact        Contact    @relation(fields: [contactId], references: [id], onDelete: Cascade)
+  status         ConvStatus @default(OPEN)
+  aiPaused       Boolean    @default(false)
+  aiPausedUntil  DateTime?
+  humanTakeoverAt DateTime?
+  lastMsgAt      DateTime   @default(now())
+  messages       Message[]
+  lead           Lead?
+  createdAt      DateTime   @default(now())
 
   @@index([lastMsgAt])
+  @@index([aiPausedUntil])
 }
 
 enum ConvStatus {

@@ -47,6 +47,7 @@ export default function AttendModal({ lead, isNew, onClose, onUpdated }: Props) 
   const [quickReply, setQuickReply] = useState("");
   const [sendingQuick, setSendingQuick] = useState(false);
   const [aiPaused, setAiPaused] = useState(false);
+  const [aiPausedUntil, setAiPausedUntil] = useState<string | null>(null);
   const scrollRef = useRef<HTMLDivElement>(null);
 
   async function loadConversation() {
@@ -55,7 +56,29 @@ export default function AttendModal({ lead, isNew, onClose, onUpdated }: Props) 
     const d = await res.json();
     setMessages(d.conversation?.messages || []);
     setAiPaused(!!d.conversation?.aiPaused);
+    setAiPausedUntil(d.conversation?.aiPausedUntil || null);
     setTimeout(() => scrollRef.current?.scrollTo(0, scrollRef.current.scrollHeight), 50);
+  }
+
+  async function doAction(action: "resume_now" | "pause_indefinitely" | "pause_hours", hours?: number) {
+    if (!lead?.conversation.id) return;
+    await fetch(`/api/conversations/${lead.conversation.id}`, {
+      method: "PATCH",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ action, hours }),
+    });
+    loadConversation();
+  }
+
+  function pauseRemainingText(): string | null {
+    if (!aiPausedUntil) return null;
+    const ms = new Date(aiPausedUntil).getTime() - Date.now();
+    if (ms <= 0) return null;
+    const mins = Math.round(ms / 60000);
+    if (mins < 60) return `IA volta em ${mins} min`;
+    const hours = Math.floor(mins / 60);
+    const remainingMins = mins % 60;
+    return `IA volta em ${hours}h ${remainingMins}min`;
   }
 
   useEffect(() => {
@@ -80,15 +103,6 @@ export default function AttendModal({ lead, isNew, onClose, onUpdated }: Props) 
     loadConversation();
   }
 
-  async function toggleAi() {
-    if (!lead?.conversation.id) return;
-    await fetch(`/api/conversations/${lead.conversation.id}`, {
-      method: "PATCH",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ aiPaused: !aiPaused, status: !aiPaused ? "HANDLED_BY_HUMAN" : "OPEN" }),
-    });
-    setAiPaused(!aiPaused);
-  }
 
   // Step 1
   const [contactName, setContactName] = useState(lead?.contact.name || "");
@@ -237,18 +251,43 @@ export default function AttendModal({ lead, isNew, onClose, onUpdated }: Props) 
           {/* Aba Conversa */}
           {tab === "conversa" && lead && (
             <div className="space-y-4">
-              <div className="flex items-center justify-between">
+              <div className="flex items-center justify-between flex-wrap gap-3">
                 <div className="text-xs text-fg-muted">
-                  {messages.length} mensagens · {aiPaused ? "🛑 IA pausada" : "🤖 IA ativa"}
+                  {messages.length} mensagens ·{" "}
+                  {aiPaused ? (
+                    <span className="text-gold">
+                      🛑 IA pausada
+                      {pauseRemainingText() && <> · {pauseRemainingText()}</>}
+                    </span>
+                  ) : (
+                    <span className="text-green-400">🤖 IA ativa</span>
+                  )}
                 </div>
-                <button
-                  onClick={toggleAi}
-                  className={`text-xs uppercase tracking-widest border px-4 py-2 transition-colors ${
-                    aiPaused ? "border-gold text-gold hover:bg-gold/10" : "border-line text-fg-muted hover:border-gold"
-                  }`}
-                >
-                  {aiPaused ? "Retomar IA" : "Pausar IA"}
-                </button>
+                <div className="flex gap-2 flex-wrap">
+                  {aiPaused ? (
+                    <button
+                      onClick={() => doAction("resume_now")}
+                      className="text-[10px] uppercase tracking-widest border border-gold text-gold hover:bg-gold/10 px-3 py-2 transition-colors"
+                    >
+                      ▶ Retomar IA agora
+                    </button>
+                  ) : (
+                    <>
+                      <button
+                        onClick={() => doAction("pause_hours", 4)}
+                        className="text-[10px] uppercase tracking-widest border border-line text-fg-muted hover:border-gold px-3 py-2 transition-colors"
+                      >
+                        ⏱ Pausar 4h
+                      </button>
+                      <button
+                        onClick={() => doAction("pause_indefinitely")}
+                        className="text-[10px] uppercase tracking-widest border border-line text-fg-muted hover:border-gold px-3 py-2 transition-colors"
+                      >
+                        🔒 Pausar até eu liberar
+                      </button>
+                    </>
+                  )}
+                </div>
               </div>
               <div
                 ref={scrollRef}
