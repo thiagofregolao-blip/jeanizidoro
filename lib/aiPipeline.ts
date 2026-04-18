@@ -329,10 +329,16 @@ export async function processInboundMessage(args: {
 
   // 6. history — pega mais se teve takeover humano (pra não perder contexto)
   const hadHumanTakeover = !!conv.humanTakeoverAt;
-  const history = await prisma.message.findMany({
+  const historyRaw = await prisma.message.findMany({
     where: { conversationId: conv.id },
     orderBy: { createdAt: "asc" },
     take: hadHumanTakeover ? 60 : 30,
+  });
+  // Filtra auto-replies de off-hours do histórico — Sofia não deve
+  // interpretar suas próprias mensagens genéricas como contexto de conversa
+  const history = historyRaw.filter((m) => {
+    const meta = m.meta as { offHoursReply?: boolean } | null;
+    return !meta?.offHoursReply;
   });
   // Anota quem escreveu cada msg pro Claude distinguir Jean de Sofia
   const formatted = history.map((m) => {
