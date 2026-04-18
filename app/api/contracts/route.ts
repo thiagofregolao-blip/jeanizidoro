@@ -83,22 +83,28 @@ export async function POST(req: NextRequest) {
   const docName = `Contrato - ${contact.name || contact.phone} - ${eventType || "Evento"}`;
 
   let autentiqueResult: { id: string; publicUrl?: string } | null = null;
-  try {
-    autentiqueResult = await createDocumentWithFile({
-      name: docName,
-      pdf: pdfBuffer,
-      signers: [
-        {
-          name: contact.name || "Cliente",
-          email: contact.email || contactEmail || undefined,
-          phone: !contact.email && !contactEmail ? contact.phone : undefined,
-        },
-      ],
-      message: `Contrato de serviços — Jean Izidoro. Qualquer dúvida, estamos à disposição.`,
-    });
-  } catch (e) {
-    console.error("Autentique error", e);
-    // ainda assim salva o contrato como DRAFT
+  let autentiqueError: string | null = null;
+
+  if (!process.env.AUTENTIQUE_TOKEN) {
+    autentiqueError = "AUTENTIQUE_TOKEN não configurado. O contrato foi salvo como rascunho — adicione o token do Autentique nas variáveis do Railway pra enviar automaticamente.";
+  } else {
+    try {
+      autentiqueResult = await createDocumentWithFile({
+        name: docName,
+        pdf: pdfBuffer,
+        signers: [
+          {
+            name: contact.name || "Cliente",
+            email: contact.email || contactEmail || undefined,
+            phone: !contact.email && !contactEmail ? contact.phone : undefined,
+          },
+        ],
+        message: `Contrato de serviços — Jean Izidoro. Qualquer dúvida, estamos à disposição.`,
+      });
+    } catch (e) {
+      autentiqueError = e instanceof Error ? e.message : String(e);
+      console.error("Autentique error", autentiqueError);
+    }
   }
 
   const contract = await prisma.contract.create({
@@ -130,5 +136,9 @@ export async function POST(req: NextRequest) {
     }).catch(() => {});
   }
 
-  return NextResponse.json({ contract, autentique: autentiqueResult });
+  return NextResponse.json({
+    contract,
+    autentique: autentiqueResult,
+    warning: autentiqueError,
+  });
 }

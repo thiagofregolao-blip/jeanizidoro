@@ -82,6 +82,31 @@ export default function HealthDashboard() {
         )}
       </div>
 
+      {/* Unlock all */}
+      <div className="luxury-glass p-6 rounded-sm">
+        <div className="flex items-center justify-between flex-wrap gap-3">
+          <div>
+            <h3 className="font-display text-xl mb-1">🔓 Destravar conversas</h3>
+            <p className="text-xs text-fg-muted">
+              Reativa a IA em TODAS as conversas marcadas como HANDLED_BY_HUMAN ou pausadas.
+              Útil se alguma conversa travou sem você ter assumido.
+            </p>
+          </div>
+          <button
+            onClick={async () => {
+              if (!confirm("Reativar IA em todas as conversas travadas?")) return;
+              const r = await fetch("/api/conversations/unlock-all", { method: "POST" });
+              const d = await r.json();
+              alert(`${d.unlocked || 0} conversa(s) destravada(s) ✓`);
+              load();
+            }}
+            className="text-xs uppercase tracking-[0.3em] border border-gold text-gold hover:bg-gold/10 px-6 py-3 transition-colors"
+          >
+            Destravar todas
+          </button>
+        </div>
+      </div>
+
       {/* Stats 24h */}
       <div className="luxury-glass p-6 rounded-sm">
         <h3 className="font-display text-2xl mb-4">Últimas 24h por fonte</h3>

@@ -10,8 +10,27 @@ type Lead = {
   location: string | null;
   budget: string | null;
   summary: string | null;
+  attendDraft?: AttendDraft | null;
   contact: { id: string; name: string | null; phone: string };
   conversation: { id: string };
+};
+
+type AttendDraft = {
+  step?: number;
+  contactName?: string;
+  contactPhone?: string;
+  eventType?: string;
+  eventDate?: string;
+  guestCount?: string;
+  location?: string;
+  style?: string;
+  notes?: string;
+  services?: string[];
+  totalValue?: string;
+  paymentTerms?: string;
+  sendVia?: "whatsapp" | "email" | "both";
+  contractId?: string;
+  contractUrl?: string;
 };
 
 type Message = {
@@ -104,27 +123,85 @@ export default function AttendModal({ lead, isNew, onClose, onUpdated }: Props) 
   }
 
 
+  const d: AttendDraft = lead?.attendDraft || {};
+
   // Step 1
-  const [contactName, setContactName] = useState(lead?.contact.name || "");
-  const [contactPhone, setContactPhone] = useState(lead?.contact.phone || "");
-  const [eventType, setEventType] = useState(lead?.eventType || "");
+  const [contactName, setContactName] = useState(d.contactName || lead?.contact.name || "");
+  const [contactPhone, setContactPhone] = useState(d.contactPhone || lead?.contact.phone || "");
+  const [eventType, setEventType] = useState(d.eventType || lead?.eventType || "");
   const [eventDate, setEventDate] = useState(
-    lead?.eventDate ? lead.eventDate.slice(0, 10) : ""
+    d.eventDate || (lead?.eventDate ? lead.eventDate.slice(0, 10) : "")
   );
-  const [guestCount, setGuestCount] = useState(lead?.guestCount?.toString() || "");
-  const [location, setLocation] = useState(lead?.location || "");
-  const [style, setStyle] = useState("");
-  const [notes, setNotes] = useState(lead?.summary || "");
+  const [guestCount, setGuestCount] = useState(d.guestCount || lead?.guestCount?.toString() || "");
+  const [location, setLocation] = useState(d.location || lead?.location || "");
+  const [style, setStyle] = useState(d.style || "");
+  const [notes, setNotes] = useState(d.notes || lead?.summary || "");
 
   // Step 2
-  const [services, setServices] = useState<string[]>([]);
-  const [totalValue, setTotalValue] = useState("");
-  const [paymentTerms, setPaymentTerms] = useState("");
+  const [services, setServices] = useState<string[]>(d.services || []);
+  const [totalValue, setTotalValue] = useState(d.totalValue || "");
+  const [paymentTerms, setPaymentTerms] = useState(d.paymentTerms || "");
 
   // Step 3 / 4
-  const [contractStatus, setContractStatus] = useState<"draft" | "sending" | "sent" | "error">("draft");
-  const [contractResult, setContractResult] = useState<{ id?: string; publicUrl?: string; error?: string } | null>(null);
-  const [sendVia, setSendVia] = useState<"whatsapp" | "email" | "both">("whatsapp");
+  const [contractStatus, setContractStatus] = useState<"draft" | "sending" | "sent" | "error">(
+    d.contractId ? "sent" : "draft"
+  );
+  const [contractResult, setContractResult] = useState<{ id?: string; publicUrl?: string; error?: string } | null>(
+    d.contractId ? { id: d.contractId, publicUrl: d.contractUrl } : null
+  );
+  const [sendVia, setSendVia] = useState<"whatsapp" | "email" | "both">(d.sendVia || "whatsapp");
+
+  // Restaurar step salvo (default 1 pra novo atendimento)
+  useEffect(() => {
+    if (d.step && d.step !== step) setStep(d.step);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
+
+  // Auto-save do draft no servidor quando dados mudam
+  useEffect(() => {
+    if (!lead?.id || isNew) return;
+    const timer = setTimeout(() => {
+      const draft: AttendDraft = {
+        step,
+        contactName,
+        contactPhone,
+        eventType,
+        eventDate,
+        guestCount,
+        location,
+        style,
+        notes,
+        services,
+        totalValue,
+        paymentTerms,
+        sendVia,
+        contractId: contractResult?.id,
+        contractUrl: contractResult?.publicUrl,
+      };
+      fetch(`/api/leads/${lead.id}`, {
+        method: "PATCH",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ attendDraft: draft }),
+      }).catch(() => {});
+    }, 800);
+    return () => clearTimeout(timer);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [
+    step,
+    contactName,
+    contactPhone,
+    eventType,
+    eventDate,
+    guestCount,
+    location,
+    style,
+    notes,
+    services,
+    totalValue,
+    paymentTerms,
+    sendVia,
+    contractResult,
+  ]);
 
   function toggleService(s: string) {
     setServices((arr) => (arr.includes(s) ? arr.filter((x) => x !== s) : [...arr, s]));
@@ -182,7 +259,11 @@ export default function AttendModal({ lead, isNew, onClose, onUpdated }: Props) 
         setContractResult({ error: data.error || "Erro ao gerar contrato" });
         return;
       }
-      setContractResult({ id: data.contract?.id, publicUrl: data.autentique?.publicUrl });
+      setContractResult({
+        id: data.contract?.id,
+        publicUrl: data.autentique?.publicUrl,
+        error: data.warning || undefined,
+      });
       setContractStatus("sent");
       setStep(4);
     } catch (e) {
@@ -514,14 +595,20 @@ export default function AttendModal({ lead, isNew, onClose, onUpdated }: Props) 
           {/* Step 4 — Acompanhamento */}
           {step === 4 && (
             <div className="text-center py-12">
-              <div className="text-6xl mb-6">✓</div>
-              <h3 className="font-display text-3xl mb-4">Contrato enviado</h3>
-              <p className="text-fg-muted mb-8">
-                Cliente receberá o contrato via Autentique. Você verá o status em tempo real.
+              <div className="text-6xl mb-6">{contractResult?.error ? "⚠️" : "✓"}</div>
+              <h3 className="font-display text-3xl mb-4">
+                {contractResult?.error ? "Contrato salvo como rascunho" : "Contrato enviado"}
+              </h3>
+              <p className="text-fg-muted mb-8 max-w-lg mx-auto">
+                {contractResult?.error
+                  ? contractResult.error
+                  : "Cliente receberá o contrato via Autentique. Você verá o status em tempo real."}
               </p>
               <div className="luxury-glass inline-block px-8 py-4 rounded-sm">
                 <div className="text-[10px] tracking-[0.3em] uppercase text-gold mb-1">Status</div>
-                <div className="font-display text-xl">Aguardando assinatura</div>
+                <div className="font-display text-xl">
+                  {contractResult?.error ? "Rascunho (não enviado)" : "Aguardando assinatura"}
+                </div>
               </div>
               {contractResult?.publicUrl && (
                 <div className="mt-6">

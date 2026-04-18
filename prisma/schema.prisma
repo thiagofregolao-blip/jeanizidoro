@@ -102,6 +102,7 @@ model Lead {
   style          String?
   summary        String?      @db.Text
   rawData        Json?
+  attendDraft    Json?
   score          Int          @default(0)
   createdAt      DateTime     @default(now())
   updatedAt      DateTime     @updatedAt
