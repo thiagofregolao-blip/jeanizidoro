@@ -8,6 +8,7 @@ import {
   type ContactProfile,
 } from "./claude";
 import { getFreeBusy, listUpcomingEvents } from "./google";
+import { buildLeadDossier } from "./leadDossier";
 import {
   logError,
   validateReply,
@@ -360,8 +361,11 @@ export async function processInboundMessage(args: {
   // 7. initial micro-delay
   await sleep(rand(2000, 5000));
 
-  // 7.5 calendar context (non-blocking failure)
-  const calendarContext = await getCalendarContext();
+  // 7.5 calendar + dossiê do lead (non-blocking failure)
+  const [calendarContext, leadDossier] = await Promise.all([
+    getCalendarContext(),
+    buildLeadDossier(conv.id),
+  ]);
 
   // 8. generate reply (with retry + timeout já nos wrappers)
   console.log(`[PIPELINE] calling claude, tone=${detectedTone}, firstInteraction=${isFirstInteraction}`);
@@ -377,6 +381,7 @@ export async function processInboundMessage(args: {
       isFirstInteraction,
       calendarContext,
       humanTakeoverContext: resumeAfterHumanContext,
+      leadDossier,
     });
   } catch (e) {
     const msg = e instanceof Error ? e.message : String(e);
