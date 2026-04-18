@@ -20,10 +20,58 @@ export async function POST(req: NextRequest) {
   });
 
   try {
-    // ignore outgoing (sent by us) and group messages
+    // fromMe = ou a Sofia mandando (echo do Z-API) ou o Jean respondendo direto pelo celular
     if (payload.fromMe) {
-      await prisma.webhookLog.update({ where: { id: log.id }, data: { processed: true, error: "fromMe" } });
-      return NextResponse.json({ ok: true, skipped: "fromMe" });
+      if (payload.phone && !payload.isGroup) {
+        const text = extractTextFromZapi(payload);
+        const contact = await prisma.contact.findUnique({ where: { phone: payload.phone } });
+        if (contact && text) {
+          // Dedup: se já temos essa msg salva (Sofia enviou), é echo do Z-API → ignora
+          if (payload.messageId) {
+            const existing = await prisma.message.findUnique({
+              where: { zapiMessageId: payload.messageId },
+            });
+            if (existing) {
+              await prisma.webhookLog.update({
+                where: { id: log.id },
+                data: { processed: true, error: "fromMe_echo_ai" },
+              });
+              return NextResponse.json({ ok: true, skipped: "fromMe_echo_ai" });
+            }
+          }
+
+          // Não é echo → é o Jean respondendo direto pelo celular
+          const conv = await prisma.conversation.findFirst({
+            where: { contactId: contact.id, status: { not: "CLOSED" } },
+            orderBy: { createdAt: "desc" },
+          });
+          if (conv) {
+            await prisma.message.create({
+              data: {
+                conversationId: conv.id,
+                direction: "OUT",
+                sender: "HUMAN",
+                content: text,
+                zapiMessageId: payload.messageId ?? null,
+              },
+            });
+            await prisma.conversation.update({
+              where: { id: conv.id },
+              data: {
+                lastMsgAt: new Date(),
+                status: "HANDLED_BY_HUMAN",
+                aiPaused: true,
+              },
+            });
+            console.log(`[WEBHOOK] Jean respondeu direto pelo WA, IA pausada para conv=${conv.id}`);
+          }
+        }
+      }
+      await prisma.webhookLog.update({
+        where: { id: log.id },
+        data: { processed: true, error: "fromMe_human_takeover" },
+      });
+      return NextResponse.json({ ok: true, skipped: "fromMe_human_takeover" });
     }
     if (payload.isGroup) {
       await prisma.webhookLog.update({ where: { id: log.id }, data: { processed: true, error: "group" } });

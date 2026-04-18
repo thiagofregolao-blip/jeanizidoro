@@ -12,10 +12,48 @@ type Lead = {
   guestCount: number | null;
   location: string | null;
   budget: string | null;
+  style?: string | null;
   summary: string | null;
   contact: { id: string; name: string | null; phone: string };
-  conversation: { id: string; lastMsgAt: string };
+  conversation: { id: string; lastMsgAt: string; status?: string };
 };
+
+function formatPhone(phone: string): string {
+  // 5511999999999 → +55 (11) 99999-9999
+  const p = phone.replace(/\D/g, "");
+  if (p.length === 13) return `+${p.slice(0, 2)} (${p.slice(2, 4)}) ${p.slice(4, 9)}-${p.slice(9)}`;
+  if (p.length === 12) return `+${p.slice(0, 2)} (${p.slice(2, 4)}) ${p.slice(4, 8)}-${p.slice(8)}`;
+  if (p.length === 11) return `(${p.slice(0, 2)}) ${p.slice(2, 7)}-${p.slice(7)}`;
+  return phone;
+}
+
+function qualificationPct(l: Lead): number {
+  let filled = 0;
+  if (l.eventType) filled++;
+  if (l.eventDate) filled++;
+  if (l.guestCount) filled++;
+  if (l.location) filled++;
+  if (l.style) filled++;
+  return (filled / 5) * 100;
+}
+
+const PHASES = [
+  { key: "NEW", label: "Novo" },
+  { key: "QUALIFIED", label: "Qualificado" },
+  { key: "IN_SERVICE", label: "Em atendimento" },
+  { key: "PROPOSAL_SENT", label: "Proposta" },
+  { key: "CONTRACT_SENT", label: "Contrato" },
+  { key: "WON", label: "Fechado" },
+];
+
+function getPhaseIndex(l: Lead): number {
+  if (l.status === "WON") return 5;
+  if (l.status === "CONTRACT_SENT") return 4;
+  if (l.status === "PROPOSAL_SENT") return 3;
+  if (l.status === "IN_SERVICE") return 2;
+  if (qualificationPct(l) >= 60) return 1;
+  return 0;
+}
 
 const COLUMNS: { key: Lead["temperature"] | "IN_SERVICE"; label: string; emoji: string; tone: string }[] = [
   { key: "HOT", label: "Quentes", emoji: "🔥", tone: "border-red-500/30" },
@@ -94,34 +132,97 @@ export default function LeadsBoard() {
                   {items.length === 0 && (
                     <div className="text-xs text-fg-muted/60 italic">Vazio</div>
                   )}
-                  {items.map((l) => (
-                    <button
-                      key={l.id}
-                      onClick={() => setOpenLead(l)}
-                      className="w-full text-left luxury-glass p-4 rounded-sm hover:border-gold/40 transition-all group"
-                    >
-                      <div className="font-display text-lg group-hover:text-gold transition-colors">
-                        {l.contact.name || l.contact.phone}
+                  {items.map((l) => {
+                    const pct = qualificationPct(l);
+                    const phaseIdx = getPhaseIndex(l);
+                    const waUrl = `https://wa.me/${l.contact.phone.replace(/\D/g, "")}`;
+                    const humanTakenOver = l.conversation.status === "HANDLED_BY_HUMAN";
+                    return (
+                      <div key={l.id} className="luxury-glass p-4 rounded-sm hover:border-gold/40 transition-all group">
+                        <button onClick={() => setOpenLead(l)} className="w-full text-left block">
+                          <div className="flex items-center justify-between">
+                            <div className="font-display text-lg group-hover:text-gold transition-colors">
+                              {l.contact.name || formatPhone(l.contact.phone)}
+                            </div>
+                            {humanTakenOver && (
+                              <span title="Jean está na conversa" className="text-[9px] tracking-widest uppercase text-gold">👤 manual</span>
+                            )}
+                          </div>
+                          <div className="text-[10px] text-fg-muted mt-0.5">{formatPhone(l.contact.phone)}</div>
+
+                          {l.eventType && (
+                            <div className="text-xs text-gold mt-2 uppercase tracking-wider">
+                              {l.eventType}
+                              {l.eventDate && ` • ${new Date(l.eventDate).toLocaleDateString("pt-BR")}`}
+                            </div>
+                          )}
+                          {l.guestCount && (
+                            <div className="text-xs text-fg-muted mt-0.5">{l.guestCount} convidados</div>
+                          )}
+                          {l.location && (
+                            <div className="text-xs text-fg-muted truncate">{l.location}</div>
+                          )}
+                          {l.summary && (
+                            <div className="text-xs text-fg-muted/80 mt-2 line-clamp-2 italic">
+                              {l.summary}
+                            </div>
+                          )}
+
+                          {/* Termômetro de qualificação */}
+                          <div className="mt-3">
+                            <div className="flex items-center justify-between text-[9px] uppercase tracking-widest text-fg-muted mb-1">
+                              <span>Qualificação</span>
+                              <span>{Math.round(pct)}%</span>
+                            </div>
+                            <div className="h-1 bg-line rounded-full overflow-hidden">
+                              <div
+                                className="h-full bg-gradient-to-r from-gold to-gold transition-all duration-700"
+                                style={{ width: `${pct}%` }}
+                              />
+                            </div>
+                          </div>
+
+                          {/* Fases do funil */}
+                          <div className="flex gap-1 mt-3">
+                            {PHASES.map((p, i) => (
+                              <div
+                                key={p.key}
+                                title={p.label}
+                                className={`flex-1 h-1 rounded-full ${
+                                  i <= phaseIdx ? "bg-gold" : "bg-line"
+                                }`}
+                              />
+                            ))}
+                          </div>
+                          <div className="text-[9px] text-fg-muted mt-1 tracking-widest uppercase">
+                            {PHASES[phaseIdx]?.label}
+                          </div>
+                        </button>
+
+                        {/* Ações rápidas */}
+                        <div className="flex gap-2 mt-3 pt-3 border-t border-line">
+                          <a
+                            href={waUrl}
+                            target="_blank"
+                            rel="noopener"
+                            onClick={(e) => e.stopPropagation()}
+                            className="flex-1 text-[10px] tracking-widest uppercase text-center py-2 border border-green-500/40 text-green-400 hover:bg-green-500/10 transition-colors"
+                          >
+                            📱 WhatsApp
+                          </a>
+                          <button
+                            onClick={(e) => {
+                              e.stopPropagation();
+                              setOpenLead(l);
+                            }}
+                            className="flex-1 text-[10px] tracking-widest uppercase py-2 border border-gold/40 text-gold hover:bg-gold/10 transition-colors"
+                          >
+                            Atender
+                          </button>
+                        </div>
                       </div>
-                      {l.eventType && (
-                        <div className="text-xs text-gold mt-1 uppercase tracking-wider">
-                          {l.eventType}
-                          {l.eventDate && ` • ${new Date(l.eventDate).toLocaleDateString("pt-BR")}`}
-                        </div>
-                      )}
-                      {l.guestCount && (
-                        <div className="text-xs text-fg-muted mt-1">{l.guestCount} convidados</div>
-                      )}
-                      {l.location && (
-                        <div className="text-xs text-fg-muted truncate">{l.location}</div>
-                      )}
-                      {l.summary && (
-                        <div className="text-xs text-fg-muted/80 mt-2 line-clamp-2 italic">
-                          {l.summary}
-                        </div>
-                      )}
-                    </button>
-                  ))}
+                    );
+                  })}
                 </div>
               </div>
             );

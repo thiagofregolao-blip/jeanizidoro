@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 
 type Lead = {
   id: string;
@@ -12,6 +12,14 @@ type Lead = {
   summary: string | null;
   contact: { id: string; name: string | null; phone: string };
   conversation: { id: string };
+};
+
+type Message = {
+  id: string;
+  direction: "IN" | "OUT";
+  sender: "CONTACT" | "AI" | "HUMAN";
+  content: string;
+  createdAt: string;
 };
 
 type Props = {
@@ -34,6 +42,53 @@ const SERVICES = [
 export default function AttendModal({ lead, isNew, onClose, onUpdated }: Props) {
   const [meetingMode, setMeetingMode] = useState(false);
   const [step, setStep] = useState(1);
+  const [tab, setTab] = useState<"atendimento" | "conversa">("atendimento");
+  const [messages, setMessages] = useState<Message[]>([]);
+  const [quickReply, setQuickReply] = useState("");
+  const [sendingQuick, setSendingQuick] = useState(false);
+  const [aiPaused, setAiPaused] = useState(false);
+  const scrollRef = useRef<HTMLDivElement>(null);
+
+  async function loadConversation() {
+    if (!lead?.conversation.id) return;
+    const res = await fetch(`/api/conversations/${lead.conversation.id}`);
+    const d = await res.json();
+    setMessages(d.conversation?.messages || []);
+    setAiPaused(!!d.conversation?.aiPaused);
+    setTimeout(() => scrollRef.current?.scrollTo(0, scrollRef.current.scrollHeight), 50);
+  }
+
+  useEffect(() => {
+    if (tab === "conversa") {
+      loadConversation();
+      const t = setInterval(loadConversation, 5000);
+      return () => clearInterval(t);
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [tab, lead?.conversation.id]);
+
+  async function sendQuick() {
+    if (!lead?.conversation.id || !quickReply.trim()) return;
+    setSendingQuick(true);
+    await fetch(`/api/conversations/${lead.conversation.id}`, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ text: quickReply }),
+    });
+    setQuickReply("");
+    setSendingQuick(false);
+    loadConversation();
+  }
+
+  async function toggleAi() {
+    if (!lead?.conversation.id) return;
+    await fetch(`/api/conversations/${lead.conversation.id}`, {
+      method: "PATCH",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ aiPaused: !aiPaused, status: !aiPaused ? "HANDLED_BY_HUMAN" : "OPEN" }),
+    });
+    setAiPaused(!aiPaused);
+  }
 
   // Step 1
   const [contactName, setContactName] = useState(lead?.contact.name || "");
@@ -149,7 +204,105 @@ export default function AttendModal({ lead, isNew, onClose, onUpdated }: Props) 
             </div>
           </div>
 
-          {/* Stepper */}
+          {/* Tabs */}
+          {lead && (
+            <div className="flex gap-6 mb-6 border-b border-line">
+              <button
+                onClick={() => setTab("atendimento")}
+                className={`pb-3 text-xs tracking-[0.3em] uppercase transition-colors ${
+                  tab === "atendimento" ? "text-gold border-b-2 border-gold" : "text-fg-muted hover:text-fg"
+                }`}
+              >
+                Atendimento
+              </button>
+              <button
+                onClick={() => setTab("conversa")}
+                className={`pb-3 text-xs tracking-[0.3em] uppercase transition-colors ${
+                  tab === "conversa" ? "text-gold border-b-2 border-gold" : "text-fg-muted hover:text-fg"
+                }`}
+              >
+                💬 Conversa (WhatsApp)
+              </button>
+              <a
+                href={`https://wa.me/${lead.contact.phone.replace(/\D/g, "")}`}
+                target="_blank"
+                rel="noopener"
+                className="ml-auto pb-3 text-xs tracking-[0.3em] uppercase text-green-400 hover:text-green-300"
+              >
+                📱 Abrir no WhatsApp →
+              </a>
+            </div>
+          )}
+
+          {/* Aba Conversa */}
+          {tab === "conversa" && lead && (
+            <div className="space-y-4">
+              <div className="flex items-center justify-between">
+                <div className="text-xs text-fg-muted">
+                  {messages.length} mensagens · {aiPaused ? "🛑 IA pausada" : "🤖 IA ativa"}
+                </div>
+                <button
+                  onClick={toggleAi}
+                  className={`text-xs uppercase tracking-widest border px-4 py-2 transition-colors ${
+                    aiPaused ? "border-gold text-gold hover:bg-gold/10" : "border-line text-fg-muted hover:border-gold"
+                  }`}
+                >
+                  {aiPaused ? "Retomar IA" : "Pausar IA"}
+                </button>
+              </div>
+              <div
+                ref={scrollRef}
+                className="border border-line rounded-sm p-4 h-[400px] overflow-y-auto space-y-3 bg-bg-soft"
+              >
+                {messages.length === 0 && (
+                  <div className="text-fg-muted text-sm text-center py-12">Ainda sem mensagens.</div>
+                )}
+                {messages.map((m) => (
+                  <div key={m.id} className={`flex ${m.direction === "IN" ? "justify-start" : "justify-end"}`}>
+                    <div
+                      className={`max-w-[75%] p-3 rounded-sm text-sm ${
+                        m.direction === "IN"
+                          ? "bg-bg border border-line"
+                          : m.sender === "AI"
+                          ? "bg-gold/10 border border-gold/30"
+                          : "bg-gold text-bg"
+                      }`}
+                    >
+                      <div className="text-[9px] uppercase tracking-widest mb-1 opacity-60">
+                        {m.sender === "AI" ? "Sofia (IA)" : m.sender === "HUMAN" ? "Jean" : "Cliente"} ·{" "}
+                        {new Date(m.createdAt).toLocaleString("pt-BR", {
+                          day: "2-digit",
+                          month: "short",
+                          hour: "2-digit",
+                          minute: "2-digit",
+                        })}
+                      </div>
+                      <div className="whitespace-pre-wrap">{m.content}</div>
+                    </div>
+                  </div>
+                ))}
+              </div>
+              <div className="flex gap-2">
+                <input
+                  value={quickReply}
+                  onChange={(e) => setQuickReply(e.target.value)}
+                  onKeyDown={(e) => e.key === "Enter" && sendQuick()}
+                  placeholder="Responder como Jean (pausa a IA automaticamente)"
+                  className="flex-1 bg-transparent border border-line px-4 py-3 outline-none focus:border-gold"
+                />
+                <button
+                  onClick={sendQuick}
+                  disabled={sendingQuick || !quickReply.trim()}
+                  className="bg-gold text-bg uppercase tracking-[0.2em] text-xs px-6 disabled:opacity-50"
+                >
+                  Enviar
+                </button>
+              </div>
+            </div>
+          )}
+
+          {/* Stepper do atendimento */}
+          {tab === "atendimento" && (
           <div className="flex items-center gap-2 mb-10">
             {[1, 2, 3, 4].map((n) => (
               <div
@@ -160,7 +313,10 @@ export default function AttendModal({ lead, isNew, onClose, onUpdated }: Props) 
               />
             ))}
           </div>
+          )}
 
+          {tab === "atendimento" && (
+          <>
           {/* Step 1 — Ficha */}
           {step === 1 && (
             <div className={`space-y-6 ${meetingMode ? "text-xl" : ""}`}>
@@ -346,6 +502,8 @@ export default function AttendModal({ lead, isNew, onClose, onUpdated }: Props) 
                 </button>
               </div>
             </div>
+          )}
+          </>
           )}
         </div>
       </div>
