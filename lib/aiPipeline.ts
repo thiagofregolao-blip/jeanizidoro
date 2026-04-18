@@ -213,18 +213,22 @@ export async function processInboundMessage(args: {
   if (!isWithinHours(cfg.workStartHour, cfg.workEndHour)) {
     console.log(`[PIPELINE] off_hours (cfg=${cfg.workStartHour}-${cfg.workEndHour} nowBR=${getHourInBR()} utc=${new Date().getHours()})`);
 
-    // Auto-resposta fora do horário (com cooldown 4h pra não spammar)
+    // Auto-resposta fora do horário (cooldown só conta OUTRAS off_hours_replies)
     if (cfg.offHoursAutoReply && !!cfg.offHoursMessage) {
-      const lastOut = await prisma.message.findFirst({
-        where: { conversationId: conv.id, direction: "OUT" },
+      // Busca só a última off_hours_reply anterior (não qualquer msg out)
+      const lastOffHours = await prisma.message.findFirst({
+        where: {
+          conversationId: conv.id,
+          direction: "OUT",
+          meta: { path: ["offHoursReply"], equals: true },
+        },
         orderBy: { createdAt: "desc" },
       });
-      const lastOutMinsAgo = lastOut
-        ? (Date.now() - new Date(lastOut.createdAt).getTime()) / 60000
+      const lastOffHoursMinsAgo = lastOffHours
+        ? (Date.now() - new Date(lastOffHours.createdAt).getTime()) / 60000
         : Infinity;
 
-      if (lastOutMinsAgo > 240) {
-        // > 4h desde a última resposta nossa → envia auto-resposta
+      if (lastOffHoursMinsAgo > 240) {
         try {
           await sleep(rand(3000, 8000));
           await setTyping(phone, 2000);
@@ -236,15 +240,16 @@ export async function processInboundMessage(args: {
               sender: "AI",
               content: cfg.offHoursMessage,
               zapiMessageId: sent?.messageId ?? null,
+              meta: { offHoursReply: true } as object,
             },
           });
-          console.log(`[PIPELINE] off_hours auto-reply enviada`);
+          console.log(`[PIPELINE] off_hours auto-reply enviada ✓`);
         } catch (e) {
           const msg = e instanceof Error ? e.message : String(e);
           await logError("zapi:off_hours_reply", msg);
         }
       } else {
-        console.log(`[PIPELINE] off_hours auto-reply skipped (última msg out há ${Math.round(lastOutMinsAgo)}min)`);
+        console.log(`[PIPELINE] off_hours auto-reply skipped (última auto-reply há ${Math.round(lastOffHoursMinsAgo)}min)`);
       }
     }
 

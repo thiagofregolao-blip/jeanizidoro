@@ -70,6 +70,7 @@ model Message {
   content        String       @db.Text
   mediaUrl       String?
   zapiMessageId  String?      @unique
+  meta           Json?
   createdAt      DateTime     @default(now())
 
   @@index([conversationId, createdAt])
