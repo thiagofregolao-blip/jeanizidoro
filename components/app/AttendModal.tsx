@@ -283,23 +283,24 @@ export default function AttendModal({ lead, isNew, onClose, onUpdated }: Props) 
 
   return (
     <div
-      className={`fixed inset-0 z-[100] ${
+      className={`fixed inset-0 z-[100] overflow-y-auto ${
         meetingMode ? "bg-bg" : "bg-black/60 backdrop-blur-sm"
-      } flex items-start md:items-center justify-center p-0 md:p-6`}
+      }`}
       onClick={(e) => {
         if (e.target === e.currentTarget && !meetingMode) onClose();
       }}
     >
       <div
-        className={`relative ${
-          meetingMode
-            ? "w-full h-full max-w-none"
-            : "w-full max-w-4xl max-h-[92vh]"
-        } flex flex-col`}
+        className={`min-h-full flex items-start md:items-center justify-center ${
+          meetingMode ? "p-0" : "p-4 md:p-8"
+        }`}
       >
         <div
-          className={`luxury-glass rounded-sm overflow-y-auto flex-1 ${
-            meetingMode ? "p-12" : "p-6 md:p-8"
+          className={`relative w-full ${meetingMode ? "max-w-none h-screen" : "max-w-4xl"}`}
+        >
+        <div
+          className={`luxury-glass rounded-sm ${
+            meetingMode ? "p-12 h-full overflow-y-auto" : "p-6 md:p-8"
           }`}
         >
           {/* Header */}
@@ -405,7 +406,7 @@ export default function AttendModal({ lead, isNew, onClose, onUpdated }: Props) 
               </div>
               <div
                 ref={scrollRef}
-                className="border border-line rounded-sm p-4 h-[400px] overflow-y-auto space-y-3 bg-bg-soft"
+                className="border border-line rounded-sm p-4 max-h-[50vh] overflow-y-auto space-y-3 bg-bg-soft"
               >
                 {messages.length === 0 && (
                   <div className="text-fg-muted text-sm text-center py-12">Ainda sem mensagens.</div>
@@ -664,6 +665,7 @@ export default function AttendModal({ lead, isNew, onClose, onUpdated }: Props) 
           )}
           </>
           )}
+        </div>
         </div>
       </div>
     </div>
