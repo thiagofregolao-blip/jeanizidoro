@@ -282,9 +282,26 @@ export default function AttendModal({ lead, isNew, onClose, onUpdated }: Props) 
   }
 
   return (
-    <div className={`fixed inset-0 z-[100] bg-bg/95 ${meetingMode ? "" : "backdrop-blur-md"} overflow-y-auto`}>
-      <div className={`mx-auto ${meetingMode ? "max-w-full p-12" : "max-w-4xl p-6 md:p-12"}`}>
-        <div className={`luxury-glass rounded-sm ${meetingMode ? "p-12" : "p-8"}`}>
+    <div
+      className={`fixed inset-0 z-[100] ${
+        meetingMode ? "bg-bg" : "bg-black/60 backdrop-blur-sm"
+      } flex items-start md:items-center justify-center p-0 md:p-6`}
+      onClick={(e) => {
+        if (e.target === e.currentTarget && !meetingMode) onClose();
+      }}
+    >
+      <div
+        className={`relative ${
+          meetingMode
+            ? "w-full h-full max-w-none"
+            : "w-full max-w-4xl max-h-[92vh]"
+        } flex flex-col`}
+      >
+        <div
+          className={`luxury-glass rounded-sm overflow-y-auto flex-1 ${
+            meetingMode ? "p-12" : "p-6 md:p-8"
+          }`}
+        >
           {/* Header */}
           <div className="flex items-center justify-between mb-8 pb-6 border-b border-line">
             <div>
