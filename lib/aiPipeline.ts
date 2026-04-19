@@ -5,6 +5,7 @@ import {
   generateReply,
   detectTone,
   extractProfileLearnings,
+  updateRecentInteractions,
   type ContactProfile,
 } from "./claude";
 import { getFreeBusy, listUpcomingEvents } from "./google";
@@ -328,13 +329,16 @@ export async function processInboundMessage(args: {
     });
   }
 
-  // 6. history — pega mais se teve takeover humano (pra não perder contexto)
+  // 6. history — APENAS últimas 5 msgs (buffer conversacional).
+  // O contexto real vem do DOSSIÊ do lead, atualizado em background pelo Haiku.
+  // Isso elimina "mode collapse" (Claude imitando respostas ruins antigas).
   const hadHumanTakeover = !!conv.humanTakeoverAt;
   const historyRaw = await prisma.message.findMany({
     where: { conversationId: conv.id },
-    orderBy: { createdAt: "asc" },
-    take: hadHumanTakeover ? 60 : 30,
+    orderBy: { createdAt: "desc" },
+    take: 5,
   });
+  historyRaw.reverse(); // volta pra ordem cronológica
   // Filtra auto-replies de off-hours do histórico — Sofia não deve
   // interpretar suas próprias mensagens genéricas como contexto de conversa
   const history = historyRaw.filter((m) => {
@@ -443,21 +447,25 @@ export async function processInboundMessage(args: {
   // sucesso → reset contador do breaker
   await resetCircuitSuccess();
 
-  // 10. classify + profile (SÍNCRONO pra garantir que o Lead apareça no Kanban)
+  // 10. classify + profile + dossier update (SÍNCRONO pra Kanban + próxima resposta)
   try {
-    console.log(`[PIPELINE] classifying + extracting profile`);
-    const fullHistory = await prisma.message.findMany({
+    console.log(`[PIPELINE] classifying + updating dossier`);
+    // Pega últimas 10 msgs pra resumo (mais barato que histórico inteiro)
+    const recentMessages = await prisma.message.findMany({
       where: { conversationId: conv.id },
-      orderBy: { createdAt: "asc" },
+      orderBy: { createdAt: "desc" },
+      take: 10,
     });
-    const fullFormatted = fullHistory.map((m) => ({
+    recentMessages.reverse();
+    const recentFormatted = recentMessages.map((m) => ({
       role: (m.direction === "IN" ? "user" : "assistant") as "user" | "assistant",
       content: m.content,
     }));
 
-    const [extraction, updatedProfile] = await Promise.all([
-      classifyLead(fullFormatted),
-      extractProfileLearnings(fullFormatted, profile),
+    const [extraction, updatedProfile, recentUpdate] = await Promise.all([
+      classifyLead(recentFormatted),
+      extractProfileLearnings(recentFormatted, profile),
+      updateRecentInteractions(recentFormatted, profile),
     ]);
 
     console.log(`[PIPELINE] lead extracted: temp=${extraction.temperature} type=${extraction.eventType} date=${extraction.eventDate}`);
@@ -500,10 +508,15 @@ export async function processInboundMessage(args: {
 
     const profileUpdate: { name?: string; profile?: object } = {};
     if (extraction.contactName && !contact.name) profileUpdate.name = extraction.contactName;
-    if (updatedProfile) profileUpdate.profile = { ...updatedProfile, detectedTone } as object;
-    if (Object.keys(profileUpdate).length > 0) {
-      await prisma.contact.update({ where: { id: contact.id }, data: profileUpdate });
-    }
+    // Merge: profile longo (learnings) + recentUpdate (memória curta dinâmica)
+    const mergedProfile: ContactProfile = {
+      ...(profile || {}),
+      ...(updatedProfile || {}),
+      ...recentUpdate,
+      detectedTone,
+    };
+    profileUpdate.profile = mergedProfile as object;
+    await prisma.contact.update({ where: { id: contact.id }, data: profileUpdate });
 
     if (extraction.shouldEscalate) {
       // IA continua ativa. Só notifica o Jean que o cliente pode precisar de atenção direta.

@@ -89,6 +89,15 @@ export default function AttendModal({ lead, isNew, onClose, onUpdated }: Props) 
     loadConversation();
   }
 
+  async function resetContext() {
+    if (!lead?.conversation.id) return;
+    if (!confirm("Apagar todo o histórico desta conversa? O lead e dados do cliente são mantidos — só as mensagens são apagadas.")) return;
+    await fetch(`/api/conversations/${lead.conversation.id}/reset-context`, {
+      method: "POST",
+    });
+    loadConversation();
+  }
+
   function pauseRemainingText(): string | null {
     if (!aiPausedUntil) return null;
     const ms = new Date(aiPausedUntil).getTime() - Date.now();
@@ -368,6 +377,13 @@ export default function AttendModal({ lead, isNew, onClose, onUpdated }: Props) 
                       </button>
                     </>
                   )}
+                  <button
+                    onClick={resetContext}
+                    title="Apaga todo histórico desta conversa (mantém o lead)"
+                    className="text-[10px] uppercase tracking-widest border border-red-500/40 text-red-400 hover:bg-red-500/10 px-3 py-2 transition-colors"
+                  >
+                    🗑 Limpar conversa
+                  </button>
                 </div>
               </div>
               <div

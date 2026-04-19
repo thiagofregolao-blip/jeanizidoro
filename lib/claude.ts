@@ -30,6 +30,11 @@ export type ContactProfile = {
   pastEvents?: string[];
   notesFromAi?: string[];
   lastTopics?: string[];
+  // Novo: resumo estruturado das últimas trocas (atualizado pelo Haiku em background)
+  recentInteractions?: string[];
+  clientAlreadyAsked?: string[];
+  sofiaAlreadyExplained?: string[];
+  nextBestAction?: string;
 };
 
 const CLASSIFY_SCHEMA = `
@@ -269,6 +274,73 @@ Sua próxima resposta TEM QUE responder essa mensagem específica. Leia o DOSSI�
     .slice(0, 3);
 
   return parts.length > 0 ? parts : [txt.trim()];
+}
+
+/**
+ * Atualiza seções dinâmicas do dossiê baseado nas últimas trocas.
+ * Rodado em background pelo Haiku (barato, rápido).
+ * Mantém: recentInteractions + clientAlreadyAsked + sofiaAlreadyExplained + nextBestAction
+ */
+export async function updateRecentInteractions(
+  lastTurns: { role: "user" | "assistant"; content: string }[],
+  existing: ContactProfile | null
+): Promise<Partial<ContactProfile>> {
+  if (lastTurns.length === 0) return {};
+
+  const dialog = lastTurns
+    .slice(-10)
+    .map((t) => `${t.role === "user" ? "Cliente" : "Sofia"}: ${t.content}`)
+    .join("\n");
+
+  try {
+    const res = await anthropic.messages.create({
+      model: HAIKU,
+      max_tokens: 500,
+      system: `Você resume e estrutura uma conversa entre cliente e atendente virtual (Sofia).
+Retorne JSON estrito:
+{
+  "recentInteractions": ["bullet 1 do que aconteceu", "bullet 2", ...] (máx 5, curto),
+  "clientAlreadyAsked": ["perguntas que o cliente já fez"] (máx 5),
+  "sofiaAlreadyExplained": ["coisas que Sofia já explicou pro cliente"] (máx 5),
+  "nextBestAction": "o que Sofia deve fazer na próxima msg (1 frase)"
+}
+
+Seja conciso. Mantenha info estável entre chamadas (não invente). JSON apenas, sem markdown.`,
+      messages: [
+        {
+          role: "user",
+          content: `Contexto prévio: ${JSON.stringify({
+            recentInteractions: existing?.recentInteractions || [],
+            clientAlreadyAsked: existing?.clientAlreadyAsked || [],
+            sofiaAlreadyExplained: existing?.sofiaAlreadyExplained || [],
+          })}
+
+Últimas trocas:
+${dialog}
+
+Atualize o resumo com o que é novo.`,
+        },
+      ],
+    });
+    const txt = res.content[0].type === "text" ? res.content[0].text : "{}";
+    const cleaned = txt.replace(/```json\n?/g, "").replace(/```/g, "").trim();
+    const parsed = JSON.parse(cleaned);
+    return {
+      recentInteractions: Array.isArray(parsed.recentInteractions)
+        ? parsed.recentInteractions.slice(0, 5)
+        : existing?.recentInteractions,
+      clientAlreadyAsked: Array.isArray(parsed.clientAlreadyAsked)
+        ? [...new Set([...(existing?.clientAlreadyAsked || []), ...parsed.clientAlreadyAsked])].slice(-10)
+        : existing?.clientAlreadyAsked,
+      sofiaAlreadyExplained: Array.isArray(parsed.sofiaAlreadyExplained)
+        ? [...new Set([...(existing?.sofiaAlreadyExplained || []), ...parsed.sofiaAlreadyExplained])].slice(-10)
+        : existing?.sofiaAlreadyExplained,
+      nextBestAction: parsed.nextBestAction || existing?.nextBestAction,
+    };
+  } catch (e) {
+    console.error("updateRecentInteractions error", e);
+    return {};
+  }
 }
 
 export async function extractProfileLearnings(

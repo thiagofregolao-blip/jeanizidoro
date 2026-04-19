@@ -89,6 +89,33 @@ export async function buildLeadDossier(conversationId: string): Promise<string> 
     lines.push("");
   }
 
+  // Memória curta dinâmica — atualizada pelo Haiku a cada msg
+  if (
+    profile &&
+    (profile.recentInteractions?.length ||
+      profile.clientAlreadyAsked?.length ||
+      profile.sofiaAlreadyExplained?.length ||
+      profile.nextBestAction)
+  ) {
+    lines.push("## 📝 Interações recentes (MUITO IMPORTANTE — LEIA)");
+    if (profile.recentInteractions?.length) {
+      lines.push(`**O que rolou nas últimas trocas:**`);
+      profile.recentInteractions.forEach((i) => lines.push(`- ${i}`));
+    }
+    if (profile.clientAlreadyAsked?.length) {
+      lines.push(`\n**Perguntas que o cliente JÁ FEZ** (não peça pra repetir):`);
+      profile.clientAlreadyAsked.slice(-5).forEach((q) => lines.push(`- ${q}`));
+    }
+    if (profile.sofiaAlreadyExplained?.length) {
+      lines.push(`\n**O que VOCÊ já explicou pro cliente** (não repita literal):`);
+      profile.sofiaAlreadyExplained.slice(-5).forEach((e) => lines.push(`- ${e}`));
+    }
+    if (profile.nextBestAction) {
+      lines.push(`\n**🎯 Próxima melhor ação sugerida**: ${profile.nextBestAction}`);
+    }
+    lines.push("");
+  }
+
   // Atendimento em andamento (presencial / draft)
   if (draft && (draft.services?.length || draft.totalValue || draft.paymentTerms)) {
     lines.push("## 💼 Atendimento em andamento (presencial ou via painel)");
