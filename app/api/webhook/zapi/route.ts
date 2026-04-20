@@ -86,7 +86,21 @@ export async function POST(req: NextRequest) {
       return NextResponse.json({ ok: true, skipped: "no_phone" });
     }
 
-    const text = extractTextFromZapi(payload);
+    let text = extractTextFromZapi(payload);
+
+    // Áudio: baixa + transcreve via Groq Whisper
+    if (payload.audio?.audioUrl) {
+      console.log(`[WEBHOOK] áudio recebido, transcrevendo...`);
+      const { transcribeAudio } = await import("@/lib/transcribe");
+      const transcription = await transcribeAudio(payload.audio.audioUrl);
+      if (transcription && transcription.length > 0) {
+        text = `🎙️ ${transcription}`;
+        console.log(`[WEBHOOK] transcrição: "${transcription.slice(0, 100)}"`);
+      } else {
+        text = "[áudio — não foi possível transcrever]";
+      }
+    }
+
     if (!text) {
       await prisma.webhookLog.update({ where: { id: log.id }, data: { processed: true, error: "no_text" } });
       return NextResponse.json({ ok: true, skipped: "no_text" });
