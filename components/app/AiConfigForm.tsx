@@ -90,7 +90,7 @@ export default function AiConfigForm() {
             />
           </div>
         </div>
-        <p className="text-xs text-fg-muted mt-3">Fora desse horário a Sofia não conduz conversas, mas pode enviar auto-resposta (configure abaixo).</p>
+        <p className="text-xs text-fg-muted mt-3">Fora desse horário a Marina não conduz conversas, mas pode enviar auto-resposta (configure abaixo).</p>
       </section>
 
       <section className="luxury-glass p-6 rounded-sm">
@@ -120,7 +120,7 @@ export default function AiConfigForm() {
       </section>
 
       <section className="luxury-glass p-6 rounded-sm">
-        <h3 className="font-display text-2xl mb-4">Persona da Sofia</h3>
+        <h3 className="font-display text-2xl mb-4">Persona da Marina</h3>
         <textarea
           rows={4}
           value={cfg.personaPrompt}

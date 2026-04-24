@@ -3,7 +3,7 @@ import { prisma } from "@/lib/prisma";
 import { requireSession } from "@/lib/auth";
 
 // Apaga mensagens de uma conversa sem apagar o lead/contato.
-// Útil quando a conversa ficou "poluída" com respostas ruins da Sofia e
+// Útil quando a conversa ficou "poluída" com respostas ruins da Marina e
 // a gente quer começar fresco (o dossier permanece com a memória estruturada).
 export async function POST(_req: NextRequest, ctx: { params: Promise<{ id: string }> }) {
   try {

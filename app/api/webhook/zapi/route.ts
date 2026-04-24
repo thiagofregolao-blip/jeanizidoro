@@ -20,13 +20,13 @@ export async function POST(req: NextRequest) {
   });
 
   try {
-    // fromMe = ou a Sofia mandando (echo do Z-API) ou o Jean respondendo direto pelo celular
+    // fromMe = ou a Marina mandando (echo do Z-API) ou o Jean respondendo direto pelo celular
     if (payload.fromMe) {
       if (payload.phone && !payload.isGroup) {
         const text = extractTextFromZapi(payload);
         const contact = await prisma.contact.findUnique({ where: { phone: payload.phone } });
         if (contact && text) {
-          // Dedup: se já temos essa msg salva (Sofia enviou), é echo do Z-API → ignora
+          // Dedup: se já temos essa msg salva (Marina enviou), é echo do Z-API → ignora
           if (payload.messageId) {
             const existing = await prisma.message.findUnique({
               where: { zapiMessageId: payload.messageId },

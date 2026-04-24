@@ -2,7 +2,7 @@ import { NextRequest, NextResponse } from "next/server";
 import { prisma } from "@/lib/prisma";
 import { requireSession } from "@/lib/auth";
 
-const DEFAULT_PERSONA = `Você é Sofia, recepcionista virtual de Jean Izidoro. Tom acolhedor, elegante e direto.`;
+const DEFAULT_PERSONA = `Você é Marina, recepcionista virtual de Jean Izidoro. Tom acolhedor, elegante e direto.`;
 const DEFAULT_CONTEXT = `Jean Izidoro é arquiteto e cenógrafo de eventos de alto padrão em São Paulo. Casamentos, corporativo, cenografia.`;
 
 export async function GET() {

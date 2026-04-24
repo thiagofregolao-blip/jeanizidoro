@@ -11,8 +11,8 @@ type AttendDraft = {
 
 /**
  * Monta um dossiê completo do lead em markdown.
- * Incluído no prompt da Sofia como "memória persistente" estruturada.
- * Assim a Sofia sabe TUDO sobre o cliente sem depender só do histórico de msgs.
+ * Incluído no prompt da Marina como "memória persistente" estruturada.
+ * Assim a Marina sabe TUDO sobre o cliente sem depender só do histórico de msgs.
  */
 export async function buildLeadDossier(conversationId: string): Promise<string> {
   const conv = await prisma.conversation.findUnique({

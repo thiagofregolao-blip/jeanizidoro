@@ -423,7 +423,7 @@ export default function AttendModal({ lead, isNew, onClose, onUpdated }: Props) 
                       }`}
                     >
                       <div className="text-[9px] uppercase tracking-widest mb-1 opacity-60">
-                        {m.sender === "AI" ? "Sofia (IA)" : m.sender === "HUMAN" ? "Jean" : "Cliente"} ·{" "}
+                        {m.sender === "AI" ? "Marina (IA)" : m.sender === "HUMAN" ? "Jean" : "Cliente"} ·{" "}
                         {new Date(m.createdAt).toLocaleString("pt-BR", {
                           day: "2-digit",
                           month: "short",

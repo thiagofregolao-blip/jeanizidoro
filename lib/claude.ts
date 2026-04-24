@@ -58,7 +58,7 @@ CRITÉRIOS DE shouldEscalate (seja CONSERVADOR — default é false):
   * Está reclamando, irritado ou insatisfeito
   * Fez pergunta técnica que só Jean pode responder (ex: projetos passados, assinatura, casos específicos)
 - false em TODOS os outros casos, incluindo:
-  * Cliente querendo agendar reunião (a Sofia já faz isso)
+  * Cliente querendo agendar reunião (a Marina já faz isso)
   * Cliente confirmando interesse
   * Cliente dando informações do evento
   * Cliente dizendo "vamos agendar", "ok", "perfeito"
@@ -200,7 +200,7 @@ Msg 2: Explique que vai dar INÍCIO ao atendimento dele colhendo algumas informa
 Msg 3: Primeira pergunta aberta pra começar (tipo "me conta, que tipo de evento você tá planejando?")
 
 Exemplo (adapte ao tom):
-"Oi! Tudo bem? Eu sou a Sofia, atendente virtual aqui do Jean Izidoro 💫||Vou dar início ao seu atendimento por aqui, colher alguns detalhes do seu evento, e em seguida o Jean pessoalmente entra em contato pra conversar com você ✨||Me conta, que tipo de evento você tá planejando?"
+"Oi! Tudo bem? Eu sou a Marina, atendente virtual aqui do Jean Izidoro 💫||Vou dar início ao seu atendimento por aqui, colher alguns detalhes do seu evento, e em seguida o Jean pessoalmente entra em contato pra conversar com você ✨||Me conta, que tipo de evento você tá planejando?"
 
 NUNCA se passe pelo Jean. Sempre deixe claro que você é ASSISTENTE VIRTUAL dele.`
     : "\nEste cliente JÁ conversou antes. NÃO se apresente de novo. Continue naturalmente.";
@@ -208,7 +208,7 @@ NUNCA se passe pelo Jean. Sempre deixe claro que você é ASSISTENTE VIRTUAL del
   // Extrai a ÚLTIMA msg do cliente pra destacar explicitamente
   const lastUserMsg = [...history].reverse().find((m) => m.role === "user")?.content || "";
 
-  const systemPrompt = `Você é Sofia, atendente virtual do Jean Izidoro (arquiteto/cenógrafo de eventos de alto padrão em São Paulo — casamentos, corporativo, cenografia, debutantes).
+  const systemPrompt = `Você é Marina, atendente virtual do Jean Izidoro (arquiteto/cenógrafo de eventos de alto padrão em São Paulo — casamentos, corporativo, cenografia, debutantes).
 
 SUA MISSÃO: responder o cliente com naturalidade, qualificar o lead coletando info do evento, e sugerir reunião com Jean quando fizer sentido. Você NÃO é o Jean — é a atendente dele.
 
@@ -289,20 +289,20 @@ export async function updateRecentInteractions(
 
   const dialog = lastTurns
     .slice(-10)
-    .map((t) => `${t.role === "user" ? "Cliente" : "Sofia"}: ${t.content}`)
+    .map((t) => `${t.role === "user" ? "Cliente" : "Marina"}: ${t.content}`)
     .join("\n");
 
   try {
     const res = await anthropic.messages.create({
       model: HAIKU,
       max_tokens: 500,
-      system: `Você resume e estrutura uma conversa entre cliente e atendente virtual (Sofia).
+      system: `Você resume e estrutura uma conversa entre cliente e atendente virtual (Marina).
 Retorne JSON estrito:
 {
   "recentInteractions": ["bullet 1 do que aconteceu", "bullet 2", ...] (máx 5, curto),
   "clientAlreadyAsked": ["perguntas que o cliente já fez"] (máx 5),
-  "sofiaAlreadyExplained": ["coisas que Sofia já explicou pro cliente"] (máx 5),
-  "nextBestAction": "o que Sofia deve fazer na próxima msg (1 frase)"
+  "sofiaAlreadyExplained": ["coisas que Marina já explicou pro cliente"] (máx 5),
+  "nextBestAction": "o que Marina deve fazer na próxima msg (1 frase)"
 }
 
 Seja conciso. Mantenha info estável entre chamadas (não invente). JSON apenas, sem markdown.`,

@@ -20,8 +20,8 @@ import {
   alertOwner,
 } from "./reliability";
 
-const DEFAULT_PERSONA = `Você é Sofia, recepcionista virtual de Jean Izidoro. Tom acolhedor, elegante, atenta e calorosa. Sempre prioriza entender o cliente antes de oferecer algo. Nunca soa robótica — fala como uma profissional atenciosa conversaria.`;
-const DEFAULT_CONTEXT = `Jean Izidoro é arquiteto e cenógrafo de eventos de alto padrão em São Paulo. Atua há mais de 10 anos com casamentos, eventos corporativos, cenografia autoral e debutantes. Atendimentos comerciais são feitos pessoalmente no escritório do Jean — a Sofia qualifica leads e agenda reuniões.`;
+const DEFAULT_PERSONA = `Você é Marina, recepcionista virtual de Jean Izidoro. Tom acolhedor, elegante, atenta e calorosa. Sempre prioriza entender o cliente antes de oferecer algo. Nunca soa robótica — fala como uma profissional atenciosa conversaria.`;
+const DEFAULT_CONTEXT = `Jean Izidoro é arquiteto e cenógrafo de eventos de alto padrão em São Paulo. Atua há mais de 10 anos com casamentos, eventos corporativos, cenografia autoral e debutantes. Atendimentos comerciais são feitos pessoalmente no escritório do Jean — a Marina qualifica leads e agenda reuniões.`;
 
 async function getCalendarContext(): Promise<string> {
   try {
@@ -68,6 +68,20 @@ async function getOrCreateConfig() {
         escalateKeywords: ["falar com jean", "humano", "atendente", "reclamação", "reclamar"],
       },
     });
+  } else {
+    // Migração one-shot: substitui "Sofia" por "Marina" em persona/contexto antigos
+    const hasOldName =
+      /\bSofia\b/.test(cfg.personaPrompt) || /\bSofia\b/.test(cfg.businessContext);
+    if (hasOldName) {
+      cfg = await prisma.aiConfig.update({
+        where: { id: cfg.id },
+        data: {
+          personaPrompt: cfg.personaPrompt.replace(/\bSofia\b/g, "Marina"),
+          businessContext: cfg.businessContext.replace(/\bSofia\b/g, "Marina"),
+        },
+      });
+      console.log("[AI-CONFIG] persona migrada: Sofia → Marina");
+    }
   }
   return cfg;
 }
@@ -339,13 +353,13 @@ export async function processInboundMessage(args: {
     take: 5,
   });
   historyRaw.reverse(); // volta pra ordem cronológica
-  // Filtra auto-replies de off-hours do histórico — Sofia não deve
+  // Filtra auto-replies de off-hours do histórico — Marina não deve
   // interpretar suas próprias mensagens genéricas como contexto de conversa
   const history = historyRaw.filter((m) => {
     const meta = m.meta as { offHoursReply?: boolean } | null;
     return !meta?.offHoursReply;
   });
-  // Anota quem escreveu cada msg pro Claude distinguir Jean de Sofia
+  // Anota quem escreveu cada msg pro Claude distinguir Jean de Marina
   const formatted = history.map((m) => {
     let content = m.content;
     if (m.direction === "OUT" && m.sender === "HUMAN") {
@@ -357,7 +371,7 @@ export async function processInboundMessage(args: {
     };
   });
 
-  // Contexto extra pra Sofia entender que o Jean já esteve na conversa
+  // Contexto extra pra Marina entender que o Jean já esteve na conversa
   const resumeAfterHumanContext = hadHumanTakeover
     ? `\n⚠️ ATENÇÃO: o JEAN (dono do negócio) respondeu pessoalmente nesta conversa em ${conv.humanTakeoverAt?.toLocaleString("pt-BR", { timeZone: "America/Sao_Paulo" })}. Suas mensagens estão marcadas com [JEAN respondeu pessoalmente]. ANALISE O QUE ELE DISSE e continue a partir dali. NÃO repita informações que o Jean já passou. NÃO contradiga o que ele combinou. Se ele marcou uma reunião, você NÃO remarca. Se ele combinou valor, você NÃO fala de outro. Seu papel agora é COMPLEMENTAR o que o Jean já fez.`
     : "";
@@ -520,9 +534,9 @@ export async function processInboundMessage(args: {
 
     if (extraction.shouldEscalate) {
       // IA continua ativa. Só notifica o Jean que o cliente pode precisar de atenção direta.
-      console.log(`[PIPELINE] shouldEscalate=true — avisando Jean sem pausar Sofia`);
+      console.log(`[PIPELINE] shouldEscalate=true — avisando Jean sem pausar Marina`);
       await alertOwner(
-        `Lead pedindo atenção especial: ${contact.name || phone}\n\nResumo: ${extraction.summary}\n\nA Sofia continua respondendo, mas pode ser bom você assumir pelo celular.`
+        `Lead pedindo atenção especial: ${contact.name || phone}\n\nResumo: ${extraction.summary}\n\nA Marina continua respondendo, mas pode ser bom você assumir pelo celular.`
       );
     }
   } catch (e) {

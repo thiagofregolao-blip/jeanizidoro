@@ -55,7 +55,7 @@ export default function AgendaView() {
         <div className="text-6xl mb-4">📅</div>
         <h3 className="font-display text-2xl mb-4">Conecte seu Google Calendar</h3>
         <p className="text-fg-muted text-sm max-w-md mx-auto mb-6">
-          Autorize o acesso ao seu calendar pra que a Sofia consulte sua disponibilidade
+          Autorize o acesso ao seu calendar pra que a Marina consulte sua disponibilidade
           antes de sugerir datas aos clientes.
         </p>
         {urlErr && (

@@ -6,7 +6,7 @@ export default function IaPage() {
       <header className="mb-10">
         <h1 className="font-display text-5xl">Configurar IA</h1>
         <p className="text-fg-muted text-sm mt-2">
-          Defina como a Sofia (sua assistente virtual) responde os clientes
+          Defina como a Marina (sua assistente virtual) responde os clientes
         </p>
       </header>
       <AiConfigForm />
