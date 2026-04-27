@@ -8,7 +8,7 @@ import {
   updateRecentInteractions,
   type ContactProfile,
 } from "./claude";
-import { getFreeBusy, listUpcomingEvents } from "./google";
+import { getAppointmentsContext } from "./appointments";
 import { buildLeadDossier } from "./leadDossier";
 import {
   logError,
@@ -23,37 +23,6 @@ import {
 const DEFAULT_PERSONA = `Você é Marina, recepcionista virtual de Jean Izidoro. Tom acolhedor, elegante, atenta e calorosa. Sempre prioriza entender o cliente antes de oferecer algo. Nunca soa robótica — fala como uma profissional atenciosa conversaria.`;
 const DEFAULT_CONTEXT = `Jean Izidoro é arquiteto e cenógrafo de eventos de alto padrão em São Paulo. Atua há mais de 10 anos com casamentos, eventos corporativos, cenografia autoral e debutantes. Atendimentos comerciais são feitos pessoalmente no escritório do Jean — a Marina qualifica leads e agenda reuniões.`;
 
-async function getCalendarContext(): Promise<string> {
-  try {
-    const [{ busy }, events] = await Promise.all([getFreeBusy(120), listUpcomingEvents(60)]);
-
-    const days = new Set<string>();
-    for (const b of busy) {
-      if (!b.start || !b.end) continue;
-      const s = new Date(b.start);
-      const e = new Date(b.end);
-      for (let d = new Date(s); d <= e; d.setDate(d.getDate() + 1)) {
-        days.add(d.toISOString().slice(0, 10));
-      }
-    }
-
-    const busyLine = days.size
-      ? `Datas OCUPADAS (não sugerir): ${[...days].sort().slice(0, 30).join(", ")}${days.size > 30 ? "..." : ""}`
-      : "Agenda livre nos próximos 120 dias.";
-
-    const eventLines =
-      events.slice(0, 8).map((e) => {
-        const start = e.start?.dateTime || e.start?.date;
-        if (!start) return null;
-        const d = new Date(start);
-        return `• ${d.toLocaleDateString("pt-BR", { day: "2-digit", month: "short", year: "numeric" })} — ${e.summary || "(sem título)"}`;
-      }).filter(Boolean).join("\n") || "(nenhum próximo)";
-
-    return `${busyLine}\n\nPróximos compromissos do Jean:\n${eventLines}`;
-  } catch {
-    return "";
-  }
-}
 
 async function getOrCreateConfig() {
   let cfg = await prisma.aiConfig.findFirst();
@@ -379,9 +348,9 @@ export async function processInboundMessage(args: {
   // 7. initial micro-delay
   await sleep(rand(2000, 5000));
 
-  // 7.5 calendar + dossiê do lead (non-blocking failure)
+  // 7.5 agenda + dossiê do lead (non-blocking failure)
   const [calendarContext, leadDossier] = await Promise.all([
-    getCalendarContext(),
+    getAppointmentsContext(365),
     buildLeadDossier(conv.id),
   ]);
 

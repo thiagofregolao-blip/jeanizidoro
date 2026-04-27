@@ -34,8 +34,32 @@ model Contact {
   conversations Conversation[]
   leads         Lead[]
   contracts     Contract[]
+  appointments  Appointment[]
   createdAt     DateTime       @default(now())
   updatedAt     DateTime       @updatedAt
+}
+
+model Appointment {
+  id         String   @id @default(cuid())
+  date       DateTime
+  slot       SlotType
+  allowsMore Boolean  @default(false)
+  title      String   @default("Evento")
+  notes      String?  @db.Text
+  contactId  String?
+  contact    Contact? @relation(fields: [contactId], references: [id], onDelete: SetNull)
+  leadId     String?
+  createdAt  DateTime @default(now())
+  updatedAt  DateTime @updatedAt
+
+  @@index([date])
+  @@index([slot])
+}
+
+enum SlotType {
+  FULL_DAY
+  DAY
+  NIGHT
 }
 
 model Conversation {
@@ -187,18 +211,6 @@ model DailySummary {
   summary     String   @db.Text
   sentToOwner Boolean  @default(false)
   createdAt   DateTime @default(now())
-}
-
-model GoogleAuth {
-  id           String   @id @default(cuid())
-  email        String   @unique
-  accessToken  String   @db.Text
-  refreshToken String   @db.Text
-  expiresAt    DateTime
-  scope        String   @db.Text
-  calendarId   String   @default("primary")
-  createdAt    DateTime @default(now())
-  updatedAt    DateTime @updatedAt
 }
 
 model ContractTemplate {
