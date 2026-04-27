@@ -116,14 +116,20 @@ export default function AgendaView() {
   }
 
   function statusClass(status: string, isToday: boolean, isPast: boolean, isSelected: boolean) {
-    const base = "aspect-square flex flex-col items-center justify-center text-sm border rounded-sm transition-colors cursor-pointer";
+    const base = "min-h-[90px] md:min-h-[100px] flex flex-col items-stretch text-left border rounded-sm transition-colors cursor-pointer overflow-hidden p-1.5";
     if (isSelected) return `${base} border-gold bg-gold/20 ring-1 ring-gold`;
     if (isPast) return `${base} border-line/40 text-fg-muted/40 hover:border-line`;
     if (isToday) return `${base} ring-1 ring-gold border-line hover:bg-bg-soft`;
-    if (status === "full") return `${base} border-red-500/40 bg-red-500/10 text-red-300`;
-    if (status === "partial") return `${base} border-amber-500/40 bg-amber-500/10 text-amber-300`;
-    if (status === "allowsMore") return `${base} border-blue-500/40 bg-blue-500/5 text-blue-300`;
+    if (status === "full") return `${base} border-red-500/40 bg-red-500/10`;
+    if (status === "partial") return `${base} border-amber-500/40 bg-amber-500/10`;
+    if (status === "allowsMore") return `${base} border-blue-500/40 bg-blue-500/5`;
     return `${base} border-line hover:border-gold/40`;
+  }
+
+  function eventBadgeClass(slot: SlotType) {
+    if (slot === "FULL_DAY") return "bg-red-500/20 text-red-300 border-l-2 border-red-500";
+    if (slot === "DAY") return "bg-amber-500/20 text-amber-300 border-l-2 border-amber-500";
+    return "bg-blue-500/20 text-blue-300 border-l-2 border-blue-500";
   }
 
   // ─────────────────────────────────────────────
@@ -315,7 +321,7 @@ export default function AgendaView() {
             </div>
             <div className="grid grid-cols-7 gap-2">
               {grid.map((cell, idx) => {
-                if (!cell) return <div key={`e-${idx}`} className="aspect-square" />;
+                if (!cell) return <div key={`e-${idx}`} className="min-h-[90px] md:min-h-[100px]" />;
                 const status = getDayStatus(cell.iso);
                 const isToday = cell.iso === `${today.getFullYear()}-${String(today.getMonth() + 1).padStart(2, "0")}-${String(today.getDate()).padStart(2, "0")}`;
                 const isPast = new Date(cell.iso + "T12:00:00").getTime() < new Date(today.toDateString()).getTime();
@@ -326,18 +332,32 @@ export default function AgendaView() {
                     key={cell.iso}
                     onClick={() => toggleDaySelection(cell.iso)}
                     className={statusClass(status, isToday, isPast, isSelected)}
-                    title={dayAppts.length ? dayAppts.map((a) => `${SLOT_LABELS[a.slot].emoji} ${a.title}`).join("\n") : "Livre"}
+                    title={dayAppts.length ? dayAppts.map((a) => `${SLOT_LABELS[a.slot].emoji} ${a.title}${a.allowsMore ? " (aceita encaixar)" : ""}`).join("\n") : "Livre"}
                   >
-                    <div className={`font-display text-base ${isToday ? "text-gold" : ""}`}>{cell.dayNum}</div>
-                    {dayAppts.length > 0 && (
-                      <div className="flex gap-0.5 mt-0.5">
-                        {dayAppts.slice(0, 3).map((a) => (
-                          <span key={a.id} className="text-[8px]">
-                            {SLOT_LABELS[a.slot].emoji}
-                          </span>
-                        ))}
-                      </div>
-                    )}
+                    {/* Cabeçalho: número do dia */}
+                    <div className="flex items-center justify-between mb-1">
+                      <span className={`font-display text-sm md:text-base leading-none ${isToday ? "text-gold" : ""}`}>
+                        {cell.dayNum}
+                      </span>
+                      {dayAppts.some((a) => a.allowsMore) && (
+                        <span className="text-[9px]" title="Aceita encaixar">🔓</span>
+                      )}
+                    </div>
+
+                    {/* Eventos do dia (até 3 visíveis + "+N") */}
+                    <div className="flex-1 flex flex-col gap-0.5 overflow-hidden">
+                      {dayAppts.slice(0, 3).map((a) => (
+                        <div
+                          key={a.id}
+                          className={`text-[9px] md:text-[10px] px-1 py-0.5 truncate leading-tight ${eventBadgeClass(a.slot)}`}
+                        >
+                          {SLOT_LABELS[a.slot].emoji} {a.title}
+                        </div>
+                      ))}
+                      {dayAppts.length > 3 && (
+                        <div className="text-[9px] text-fg-muted">+{dayAppts.length - 3}</div>
+                      )}
+                    </div>
                   </button>
                 );
               })}
