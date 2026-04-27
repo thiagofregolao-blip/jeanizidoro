@@ -121,7 +121,10 @@ export default function Hero() {
             className="absolute inset-0 w-full h-[110%] object-cover"
           />
         )}
-        <div className="absolute inset-0 bg-gradient-to-b from-bg/40 via-bg/20 to-bg" />
+        {/* Overlay forte no topo pra destacar o menu, leve no meio, sólido no rodapé */}
+        <div className="absolute inset-0 bg-gradient-to-b from-bg/85 via-bg/30 to-bg" />
+        {/* Vinheta sutil pra contraste extra nas imagens coloridas */}
+        <div className="absolute inset-0 bg-bg/15" />
       </div>
 
       <div className="hero-text-wrap relative z-10 h-full flex flex-col justify-end pb-24 md:pb-32 px-6 md:px-12 max-w-[1600px] mx-auto">
