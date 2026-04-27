@@ -7,21 +7,21 @@ import { ScrollTrigger } from "gsap/ScrollTrigger";
 const services = [
   {
     n: "01",
-    title: "Casamentos",
+    title: "Decoração de Casamentos",
     desc: "Cenários que traduzem o amor em arquitetura. Projetos sob medida, do civil ao destination wedding.",
     img: "https://images.unsplash.com/photo-1464366400600-7168b8af9bc3?q=80&w=1600&auto=format&fit=crop",
   },
   {
     n: "02",
-    title: "Corporativo",
-    desc: "Experiências de marca, ativações e lançamentos com curadoria estética e precisão de produção.",
+    title: "Assessoria Cerimonial de Eventos",
+    desc: "Coordenação completa do seu evento — do planejamento à execução impecável no dia, com olhar atento a cada detalhe.",
     img: "https://images.unsplash.com/photo-1511578314322-379afb476865?q=80&w=1600&auto=format&fit=crop",
   },
   {
     n: "03",
-    title: "Cenografia",
-    desc: "Concepção e execução de cenografias autorais — do conceito ao último detalhe sensorial.",
-    img: "https://images.unsplash.com/photo-1478146059778-26028b07395a?q=80&w=1600&auto=format&fit=crop",
+    title: "Decoração de Festas Infantis",
+    desc: "Mundos lúdicos e cenografia autoral pra celebrar cada fase da infância com encantamento e refinamento.",
+    img: "https://images.unsplash.com/photo-1530103862676-de8c9debad1d?q=80&w=1600&auto=format&fit=crop",
   },
 ];
 

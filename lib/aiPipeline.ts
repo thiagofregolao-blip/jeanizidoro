@@ -21,7 +21,7 @@ import {
 } from "./reliability";
 
 const DEFAULT_PERSONA = `Você é Marina, recepcionista virtual de Jean Izidoro. Tom acolhedor, elegante, atenta e calorosa. Sempre prioriza entender o cliente antes de oferecer algo. Nunca soa robótica — fala como uma profissional atenciosa conversaria.`;
-const DEFAULT_CONTEXT = `Jean Izidoro é arquiteto e cenógrafo de eventos de alto padrão em São Paulo. Atua há mais de 10 anos com casamentos, eventos corporativos, cenografia autoral e debutantes. Atendimentos comerciais são feitos pessoalmente no escritório do Jean — a Marina qualifica leads e agenda reuniões.`;
+const DEFAULT_CONTEXT = `Jean Izidoro é arquiteto de eventos de alto padrão. Atua há mais de 10 anos nas três frentes: Decoração de Casamentos, Assessoria Cerimonial de Eventos (planejamento e coordenação completa) e Decoração de Festas Infantis. Atendimentos comerciais são feitos pessoalmente no escritório do Jean — a Marina qualifica leads e agenda reuniões.`;
 
 
 async function getOrCreateConfig() {
@@ -38,18 +38,30 @@ async function getOrCreateConfig() {
       },
     });
   } else {
-    // Migração one-shot: substitui "Sofia" por "Marina" em persona/contexto antigos
-    const hasOldName =
-      /\bSofia\b/.test(cfg.personaPrompt) || /\bSofia\b/.test(cfg.businessContext);
-    if (hasOldName) {
+    // Migrações one-shot na persona/contexto:
+    let needsUpdate = false;
+    let newPersona = cfg.personaPrompt;
+    let newContext = cfg.businessContext;
+
+    // 1. Sofia → Marina
+    if (/\bSofia\b/.test(newPersona) || /\bSofia\b/.test(newContext)) {
+      newPersona = newPersona.replace(/\bSofia\b/g, "Marina");
+      newContext = newContext.replace(/\bSofia\b/g, "Marina");
+      needsUpdate = true;
+    }
+
+    // 2. Escopo antigo (cenografia/corporativo/debutantes) → escopo novo
+    if (/cenografia|corporativ|debutante|15 anos/i.test(newContext)) {
+      newContext = DEFAULT_CONTEXT;
+      needsUpdate = true;
+    }
+
+    if (needsUpdate) {
       cfg = await prisma.aiConfig.update({
         where: { id: cfg.id },
-        data: {
-          personaPrompt: cfg.personaPrompt.replace(/\bSofia\b/g, "Marina"),
-          businessContext: cfg.businessContext.replace(/\bSofia\b/g, "Marina"),
-        },
+        data: { personaPrompt: newPersona, businessContext: newContext },
       });
-      console.log("[AI-CONFIG] persona migrada: Sofia → Marina");
+      console.log("[AI-CONFIG] persona/contexto atualizado");
     }
   }
   return cfg;

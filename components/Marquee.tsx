@@ -1,7 +1,8 @@
 const words = [
   "Casamentos",
-  "Cenografia",
-  "Corporativo",
+  "Festas Infantis",
+  "Assessoria Cerimonial",
+  "Decoração",
   "Produção",
   "Design",
   "Iluminação",

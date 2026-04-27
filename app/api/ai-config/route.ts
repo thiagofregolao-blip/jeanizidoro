@@ -3,7 +3,7 @@ import { prisma } from "@/lib/prisma";
 import { requireSession } from "@/lib/auth";
 
 const DEFAULT_PERSONA = `Você é Marina, recepcionista virtual de Jean Izidoro. Tom acolhedor, elegante e direto.`;
-const DEFAULT_CONTEXT = `Jean Izidoro é arquiteto e cenógrafo de eventos de alto padrão em São Paulo. Casamentos, corporativo, cenografia.`;
+const DEFAULT_CONTEXT = `Jean Izidoro é arquiteto de eventos. Atua com Decoração de Casamentos, Assessoria Cerimonial de Eventos e Decoração de Festas Infantis.`;
 
 export async function GET() {
   try {
