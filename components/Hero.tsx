@@ -1,18 +1,52 @@
 "use client";
 
-import { useEffect, useRef } from "react";
+import { useEffect, useRef, useState } from "react";
 import { gsap } from "gsap";
 import { ScrollTrigger } from "gsap/ScrollTrigger";
 
+type Banner = { id: string; title: string | null; order: number };
+
+const FALLBACK_IMG =
+  "https://images.unsplash.com/photo-1519741497674-611481863552?q=80&w=2400&auto=format&fit=crop";
+
+const SLIDE_DURATION_MS = 5000;
+const FADE_MS = 1200;
+
 export default function Hero() {
   const ref = useRef<HTMLDivElement>(null);
+  const [banners, setBanners] = useState<Banner[]>([]);
+  const [activeIdx, setActiveIdx] = useState(0);
 
+  // Carrega banners ativos
+  useEffect(() => {
+    let mounted = true;
+    fetch("/api/banners")
+      .then((r) => r.json())
+      .then((d) => {
+        if (mounted) setBanners(d.banners || []);
+      })
+      .catch(() => {});
+    return () => {
+      mounted = false;
+    };
+  }, []);
+
+  // Carrossel automático (só se houver mais de 1)
+  useEffect(() => {
+    if (banners.length <= 1) return;
+    const t = setInterval(() => {
+      setActiveIdx((i) => (i + 1) % banners.length);
+    }, SLIDE_DURATION_MS);
+    return () => clearInterval(t);
+  }, [banners.length]);
+
+  // Animações de entrada (GSAP) — uma vez quando montar
   useEffect(() => {
     if (!ref.current) return;
     const ctx = gsap.context(() => {
       const tl = gsap.timeline({ defaults: { ease: "expo.out" } });
 
-      tl.to(".hero-img", {
+      tl.to(".hero-img-wrap", {
         clipPath: "inset(0% 0 0 0)",
         duration: 1.8,
       })
@@ -26,19 +60,11 @@ export default function Hero() {
           },
           "-=1.2"
         )
-        .from(
-          ".hero-sub",
-          { opacity: 0, y: 30, duration: 1 },
-          "-=0.6"
-        )
-        .from(
-          ".hero-meta",
-          { opacity: 0, y: 20, duration: 0.8, stagger: 0.1 },
-          "-=0.8"
-        );
+        .from(".hero-sub", { opacity: 0, y: 30, duration: 1 }, "-=0.6")
+        .from(".hero-meta", { opacity: 0, y: 20, duration: 0.8, stagger: 0.1 }, "-=0.8");
 
-      gsap.to(".hero-img img", {
-        yPercent: 20,
+      gsap.to(".hero-img-wrap", {
+        yPercent: 10,
         ease: "none",
         scrollTrigger: {
           trigger: ref.current,
@@ -64,18 +90,37 @@ export default function Hero() {
     return () => ctx.revert();
   }, []);
 
+  const slides = banners.length > 0 ? banners : null;
+
   return (
     <section
       ref={ref}
       id="top"
       className="relative h-[100svh] min-h-[680px] w-full overflow-hidden"
     >
-      <div className="hero-img clip-reveal absolute inset-0">
-        <img
-          src="https://images.unsplash.com/photo-1519741497674-611481863552?q=80&w=2400&auto=format&fit=crop"
-          alt="Cenografia de casamento de luxo"
-          className="w-full h-[120%] object-cover"
-        />
+      {/* Container do crossfade */}
+      <div className="hero-img-wrap clip-reveal absolute inset-0">
+        {slides ? (
+          slides.map((b, i) => (
+            <img
+              key={b.id}
+              src={`/api/banners/${b.id}/image`}
+              alt={b.title || "Banner"}
+              className="absolute inset-0 w-full h-[110%] object-cover transition-opacity"
+              style={{
+                opacity: i === activeIdx ? 1 : 0,
+                transitionDuration: `${FADE_MS}ms`,
+                transitionTimingFunction: "ease-in-out",
+              }}
+            />
+          ))
+        ) : (
+          <img
+            src={FALLBACK_IMG}
+            alt="Banner"
+            className="absolute inset-0 w-full h-[110%] object-cover"
+          />
+        )}
         <div className="absolute inset-0 bg-gradient-to-b from-bg/40 via-bg/20 to-bg" />
       </div>
 
@@ -104,6 +149,24 @@ export default function Hero() {
           Arquitetura de eventos, cenografia autoral e produção de alto padrão
           para casamentos, experiências corporativas e celebrações únicas.
         </p>
+
+        {/* Indicadores do carrossel */}
+        {slides && slides.length > 1 && (
+          <div className="hero-meta flex items-center gap-2 mt-10">
+            {slides.map((b, i) => (
+              <button
+                key={b.id}
+                onClick={() => setActiveIdx(i)}
+                aria-label={`Banner ${i + 1}`}
+                className={`transition-all duration-500 ${
+                  i === activeIdx
+                    ? "w-12 h-px bg-gold"
+                    : "w-6 h-px bg-fg-muted/40 hover:bg-fg-muted"
+                }`}
+              />
+            ))}
+          </div>
+        )}
       </div>
 
       <div className="hero-meta absolute bottom-8 right-6 md:right-12 z-10 flex flex-col items-center gap-3 text-[10px] tracking-[0.3em] uppercase text-fg-muted">
