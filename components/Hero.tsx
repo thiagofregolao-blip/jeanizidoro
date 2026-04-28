@@ -2,7 +2,6 @@
 
 import { useEffect, useRef, useState } from "react";
 import { gsap } from "gsap";
-import { ScrollTrigger } from "gsap/ScrollTrigger";
 
 type Banner = { id: string; title: string | null; order: number };
 
@@ -156,9 +155,13 @@ export default function Hero() {
           </span>
         </h1>
 
-        <p className="hero-sub mt-10 max-w-xl text-base md:text-lg text-fg-muted leading-relaxed">
-          Arquitetura de eventos, cenografia autoral e produção de alto padrão
-          para casamentos, experiências corporativas e celebrações únicas.
+        <p
+          className="hero-sub mt-10 max-w-xl text-base md:text-lg text-fg-muted leading-relaxed"
+          style={{ textShadow: "0 1px 12px rgba(10,10,10,0.5)" }}
+        >
+          Há mais de 12 anos transformando sonhos em celebrações inesquecíveis.
+          Decoração de casamentos, assessoria cerimonial e festas infantis com a
+          atenção e o cuidado que o seu momento merece.
         </p>
 
         {/* Indicadores do carrossel */}
