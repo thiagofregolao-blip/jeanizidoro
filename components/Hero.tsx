@@ -121,10 +121,12 @@ export default function Hero() {
             className="absolute inset-0 w-full h-[110%] object-cover"
           />
         )}
-        {/* Overlay forte no topo pra destacar o menu, leve no meio, sólido no rodapé */}
+        {/* Overlay vertical: topo escuro pro menu, meio leve, rodapé sólido */}
         <div className="absolute inset-0 bg-gradient-to-b from-bg/85 via-bg/30 to-bg" />
-        {/* Vinheta sutil pra contraste extra nas imagens coloridas */}
-        <div className="absolute inset-0 bg-bg/15" />
+        {/* Gradient lateral cinematográfico: escurece esquerda onde fica o texto */}
+        <div className="absolute inset-0 bg-gradient-to-r from-bg/75 via-bg/30 to-transparent md:via-bg/15" />
+        {/* Vinheta sutil global pra reduzir saturação */}
+        <div className="absolute inset-0 bg-bg/10" />
       </div>
 
       <div className="hero-text-wrap relative z-10 h-full flex flex-col justify-end pb-24 md:pb-32 px-6 md:px-12 max-w-[1600px] mx-auto">
@@ -136,7 +138,10 @@ export default function Hero() {
           </div>
         </div>
 
-        <h1 className="font-display text-[clamp(3.2rem,10vw,10rem)] leading-[0.95] tracking-tight">
+        <h1
+          className="font-display text-[clamp(3.2rem,10vw,10rem)] leading-[0.95] tracking-tight"
+          style={{ textShadow: "0 2px 24px rgba(10,10,10,0.6)" }}
+        >
           <span className="hero-line reveal-mask block">
             <span>Cenografia que</span>
           </span>
