@@ -35,6 +35,10 @@ export async function POST(req: NextRequest, ctx: { params: Promise<{ id: string
   const conv = await prisma.conversation.findUnique({ where: { id }, include: { contact: true } });
   if (!conv) return NextResponse.json({ error: "not_found" }, { status: 404 });
 
+  // Avisa o cliente se Marina foi a última a falar (idempotente)
+  const { maybeSendTakeoverNotice } = await import("@/lib/takeover");
+  await maybeSendTakeoverNotice(id);
+
   const sent = await sendText(conv.contact.phone, text);
   const msg = await prisma.message.create({
     data: {

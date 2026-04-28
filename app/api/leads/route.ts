@@ -12,6 +12,7 @@ export async function GET() {
     include: {
       contact: true,
       conversation: { select: { id: true, lastMsgAt: true, status: true } },
+      inspirations: { orderBy: { createdAt: "desc" }, take: 12 },
     },
     orderBy: [{ temperature: "asc" }, { updatedAt: "desc" }],
   });

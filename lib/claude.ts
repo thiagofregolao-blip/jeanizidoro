@@ -146,6 +146,9 @@ type GenerateReplyInput = {
   calendarContext?: string;
   humanTakeoverContext?: string;
   leadDossier?: string;
+  attendCode?: string | null;
+  hasInspiration?: boolean;
+  mode?: "normal" | "followup";
 };
 
 export async function generateReply(input: GenerateReplyInput): Promise<string[]> {
@@ -160,6 +163,9 @@ export async function generateReply(input: GenerateReplyInput): Promise<string[]
     calendarContext = "",
     humanTakeoverContext = "",
     leadDossier = "",
+    attendCode = null,
+    hasInspiration = false,
+    mode = "normal",
   } = input;
 
   const dossierBlock = leadDossier
@@ -195,15 +201,58 @@ MEMÓRIA SOBRE ESTE CLIENTE (use com naturalidade, como quem lembra de coisa con
   const firstInteractionNote = isFirstInteraction
     ? `\n⚠️ PRIMEIRA mensagem deste cliente. Siga OBRIGATORIAMENTE este formato de apresentação em 3 mensagens quebradas com ||:
 
-Msg 1: Cumprimente + diga seu nome + deixe claro que você é a ATENDENTE VIRTUAL do Jean (assistente, não o Jean)
+Msg 1: Cumprimente + diga seu nome + deixe claro que você é a ATENDENTE VIRTUAL do Jean (assistente, não o Jean) + cite o CÓDIGO DE ATENDIMENTO ${attendCode ? `(${attendCode})` : "(será gerado)"} pra ele guardar
 Msg 2: Explique que vai dar INÍCIO ao atendimento dele colhendo algumas informações, e depois o Jean assume pessoalmente
 Msg 3: Primeira pergunta aberta pra começar (tipo "me conta, que tipo de evento você tá planejando?")
 
 Exemplo (adapte ao tom):
-"Oi! Tudo bem? Eu sou a Marina, atendente virtual aqui do Jean Izidoro 💫||Vou dar início ao seu atendimento por aqui, colher alguns detalhes do seu evento, e em seguida o Jean pessoalmente entra em contato pra conversar com você ✨||Me conta, que tipo de evento você tá planejando?"
+"Oi! Tudo bem? Eu sou a Marina, atendente virtual aqui do Jean Izidoro 💫 Pra você guardar, seu código de atendimento é ${attendCode || "ATD-2026-XXXX"}.||Vou dar início ao seu atendimento por aqui, colher alguns detalhes do seu evento, e em seguida o Jean pessoalmente entra em contato pra conversar com você ✨||Me conta, que tipo de evento você tá planejando?"
 
 NUNCA se passe pelo Jean. Sempre deixe claro que você é ASSISTENTE VIRTUAL dele.`
     : "\nEste cliente JÁ conversou antes. NÃO se apresente de novo. Continue naturalmente.";
+
+  const inspirationNote = hasInspiration
+    ? `\n━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+✨ CLIENTE ENVIOU INSPIRAÇÃO (imagem ou link)
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+O cliente acabou de enviar uma imagem ou link de referência (Instagram/Pinterest).
+
+OBRIGATÓRIO incluir na sua resposta:
+1. Agradeça a referência ("adorei!", "que linda!", "amei a estética", etc — natural com o tom)
+2. Deixe MUITO CLARO: vai usar como INSPIRAÇÃO pra criar algo único, JAMAIS como cópia
+   Exemplos: "vou usar isso como inspiração pra criar algo único pro seu evento" / "vou guardar como referência — o Jean adora se inspirar em coisas assim, mas sempre cria algo autoral pra cada cliente"
+3. Faça UMA pergunta de aprofundamento sobre o que mais ela gostou na imagem (cor? clima? estilo?)
+
+NUNCA prometa replicar o que o cliente mandou. Use a palavra "inspiração", não "fazer igual".`
+    : "";
+
+  const weekendRule = `\n━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+📅 REGRA DE FIM DE SEMANA
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+SE hoje for SEXTA, SÁBADO ou DOMINGO E o cliente pedir EXPLICITAMENTE para falar com o Jean (não com você): adicione uma observação tipo:
+"sex/sáb/dom o Jean costuma estar conduzindo eventos, então o retorno dele pode levar um pouco mais — mas vou avisar ele agora mesmo, fica tranquilo(a)!"
+
+Em qualquer outro caso (dia útil OU cliente não pediu falar com Jean), siga normal sem mencionar essa regra.`;
+
+  const followupBlock =
+    mode === "followup"
+      ? `\n━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+🔁 MODO FOLLOW-UP — REENGAJAMENTO
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+ATENÇÃO: você está reativando este cliente que parou de responder. Não houve mensagem dele há 3+ dias.
+
+Tarefa:
+- Releia o DOSSIÊ pra entender em qual etapa parou (info coletada? sem data? quase fechando?)
+- Envie 1-2 mensagens curtas (NÃO 3, é só um cutucão)
+- Tom: gentil, leve, sem pressionar — não soa cobrança
+- SEMPRE cite especificidade do que estavam falando ("seu casamento em setembro", "a festa do Lucas", etc)
+- Termine com 1 pergunta aberta tipo "como posso te ajudar a seguir?"
+
+Exemplo:
+"Oi João, tudo bem? 💫||Lembrei de você aqui — tava conversando sobre o casamento de setembro. Se quiser dar o próximo passo ou se tiver alguma dúvida, é só me chamar ✨"
+
+NUNCA mande 3 follow-ups idênticos. Varie a forma a cada vez.`
+      : "";
 
   // Extrai a ÚLTIMA msg do cliente pra destacar explicitamente
   const lastUserMsg = [...history].reverse().find((m) => m.role === "user")?.content || "";
@@ -241,6 +290,9 @@ ${calendarBlock}
 ${timeContext}
 ${humanTakeoverContext}
 ${firstInteractionNote}
+${inspirationNote}
+${weekendRule}
+${followupBlock}
 
 ═══ FORMATO DA RESPOSTA ═══
 Texto puro, em português. Separe mensagens por "||". Sem markdown. Sem explicações.

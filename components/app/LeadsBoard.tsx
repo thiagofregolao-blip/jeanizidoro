@@ -14,6 +14,7 @@ type Lead = {
   budget: string | null;
   style?: string | null;
   summary: string | null;
+  attendCode?: string | null;
   contact: { id: string; name: string | null; phone: string };
   conversation: { id: string; lastMsgAt: string; status?: string };
 };
@@ -213,6 +214,19 @@ export default function LeadsBoard() {
               const pct = qualificationPct(l);
               const waUrl = `https://wa.me/${l.contact.phone.replace(/\D/g, "")}`;
               const humanTakenOver = l.conversation.status === "HANDLED_BY_HUMAN";
+              const daysSince = Math.floor(
+                (Date.now() - new Date(l.conversation.lastMsgAt).getTime()) / (24 * 3600 * 1000)
+              );
+              const stalledClass =
+                daysSince > 3
+                  ? "text-red-400 border-red-500/40 bg-red-500/10"
+                  : daysSince >= 1
+                  ? "text-amber-400 border-amber-500/40 bg-amber-500/10"
+                  : "";
+              const showStalled =
+                daysSince >= 1 &&
+                ["NEW", "QUALIFIED", "IN_SERVICE"].includes(l.status) &&
+                ["HOT", "WARM"].includes(l.temperature);
               return (
                 <div
                   key={l.id}
@@ -220,7 +234,7 @@ export default function LeadsBoard() {
                 >
                   {/* Cliente */}
                   <div className="col-span-3 min-w-0">
-                    <div className="flex items-center gap-2">
+                    <div className="flex items-center gap-2 flex-wrap">
                       <div className="font-display text-lg truncate group-hover:text-gold transition-colors">
                         {l.contact.name || formatPhone(l.contact.phone)}
                       </div>
@@ -230,6 +244,14 @@ export default function LeadsBoard() {
                           className="text-[9px] tracking-widest uppercase text-gold shrink-0"
                         >
                           👤 manual
+                        </span>
+                      )}
+                      {showStalled && (
+                        <span
+                          className={`text-[9px] tracking-widest uppercase border px-2 py-0.5 ${stalledClass}`}
+                          title={`${daysSince} dia(s) sem resposta`}
+                        >
+                          ⏱ {daysSince}d
                         </span>
                       )}
                     </div>

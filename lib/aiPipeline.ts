@@ -10,6 +10,8 @@ import {
 } from "./claude";
 import { getAppointmentsContext } from "./appointments";
 import { buildLeadDossier } from "./leadDossier";
+import { captureFromMessage, messageHasInspirationHint } from "./inspirations";
+import type { ZapiInbound } from "./zapi";
 import {
   logError,
   validateReply,
@@ -91,6 +93,21 @@ function rand(min: number, max: number) {
   return Math.floor(min + Math.random() * (max - min));
 }
 
+async function generateAttendCode(phone: string): Promise<string> {
+  const last4 = phone.replace(/\D/g, "").slice(-4) || "0000";
+  const year = new Date().getFullYear();
+  const base = `ATD-${year}-${last4}`;
+  // Verifica colisão e adiciona sufixo (B, C, D...) se necessário
+  const existing = await prisma.lead.findFirst({ where: { attendCode: base } });
+  if (!existing) return base;
+  for (const suffix of "BCDEFGHIJKLMNOPQRSTUVWXYZ") {
+    const candidate = `${base}${suffix}`;
+    const dup = await prisma.lead.findFirst({ where: { attendCode: candidate } });
+    if (!dup) return candidate;
+  }
+  return `${base}-${Date.now().toString(36)}`;
+}
+
 function toInt(v: unknown): number | null {
   if (v === null || v === undefined || v === "") return null;
   const n = typeof v === "number" ? v : parseInt(String(v).replace(/\D/g, ""), 10);
@@ -130,8 +147,9 @@ export async function processInboundMessage(args: {
   text: string;
   senderName?: string;
   zapiMessageId?: string;
+  rawPayload?: ZapiInbound;
 }) {
-  const { phone, text, senderName, zapiMessageId } = args;
+  const { phone, text, senderName, zapiMessageId, rawPayload } = args;
   console.log(`[PIPELINE] start phone=${phone} text="${text.slice(0, 50)}" sender=${senderName}`);
 
   // 0. circuit breaker check
@@ -367,7 +385,25 @@ export async function processInboundMessage(args: {
   ]);
 
   // 8. generate reply (with retry + timeout já nos wrappers)
-  console.log(`[PIPELINE] calling claude, tone=${detectedTone}, firstInteraction=${isFirstInteraction}`);
+  // Pré-gera attendCode se for primeira interação (pra Marina poder enviar na saudação)
+  let attendCode: string | null = null;
+  if (isFirstInteraction) {
+    const existing = await prisma.lead.findFirst({
+      where: { conversationId: conv.id },
+      select: { attendCode: true },
+    });
+    attendCode = existing?.attendCode || (await generateAttendCode(phone));
+  } else {
+    const existing = await prisma.lead.findFirst({
+      where: { conversationId: conv.id },
+      select: { attendCode: true },
+    });
+    attendCode = existing?.attendCode || null;
+  }
+
+  const hasInspiration = rawPayload ? messageHasInspirationHint(rawPayload) : false;
+
+  console.log(`[PIPELINE] calling claude, tone=${detectedTone}, firstInteraction=${isFirstInteraction}, hasInspiration=${hasInspiration}`);
   let chunks: string[] = [];
   try {
     chunks = await generateReply({
@@ -381,6 +417,8 @@ export async function processInboundMessage(args: {
       calendarContext,
       humanTakeoverContext: resumeAfterHumanContext,
       leadDossier,
+      attendCode,
+      hasInspiration,
     });
   } catch (e) {
     const msg = e instanceof Error ? e.message : String(e);
@@ -470,7 +508,8 @@ export async function processInboundMessage(args: {
     const eventDateObj = extraction.eventDate ? new Date(extraction.eventDate) : null;
     const eventDateValid = eventDateObj && !isNaN(eventDateObj.getTime()) ? eventDateObj : null;
 
-    await prisma.lead.upsert({
+    // Reutiliza attendCode gerado na seção 8 (já consultado/criado)
+    const upsertedLead = await prisma.lead.upsert({
       where: { conversationId: conv.id },
       create: {
         contactId: contact.id,
@@ -485,6 +524,7 @@ export async function processInboundMessage(args: {
         style: extraction.style,
         summary: extraction.summary,
         rawData: extraction as object,
+        attendCode: attendCode || undefined,
       },
       update: {
         temperature: extraction.temperature,
@@ -497,8 +537,18 @@ export async function processInboundMessage(args: {
         style: extraction.style ?? undefined,
         summary: extraction.summary,
         rawData: extraction as object,
+        attendCode: attendCode || undefined,
       },
     });
+
+    // Captura inspirações se a msg tiver imagem ou link
+    if (rawPayload && upsertedLead) {
+      try {
+        await captureFromMessage(rawPayload, upsertedLead.id);
+      } catch (e) {
+        await logError("inspirations", e instanceof Error ? e.message : String(e));
+      }
+    }
     console.log(`[PIPELINE] lead upserted for conv=${conv.id}`);
 
     const profileUpdate: { name?: string; profile?: object } = {};

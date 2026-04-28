@@ -39,6 +39,8 @@ export async function PATCH(req: NextRequest, ctx: { params: Promise<{ id: strin
   if (body.budget !== undefined) data.budget = body.budget;
   if (body.style !== undefined) data.style = body.style;
   if (body.attendDraft !== undefined) data.attendDraft = body.attendDraft ?? undefined;
+  if (body.serviceStartedAt !== undefined)
+    data.serviceStartedAt = body.serviceStartedAt ? new Date(body.serviceStartedAt) : null;
 
   const lead = await prisma.lead.update({ where: { id }, data });
   return NextResponse.json({ lead });

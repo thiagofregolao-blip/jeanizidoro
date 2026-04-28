@@ -63,17 +63,18 @@ enum SlotType {
 }
 
 model Conversation {
-  id             String     @id @default(cuid())
-  contactId      String
-  contact        Contact    @relation(fields: [contactId], references: [id], onDelete: Cascade)
-  status         ConvStatus @default(OPEN)
-  aiPaused       Boolean    @default(false)
-  aiPausedUntil  DateTime?
-  humanTakeoverAt DateTime?
-  lastMsgAt      DateTime   @default(now())
-  messages       Message[]
-  lead           Lead?
-  createdAt      DateTime   @default(now())
+  id                   String     @id @default(cuid())
+  contactId            String
+  contact              Contact    @relation(fields: [contactId], references: [id], onDelete: Cascade)
+  status               ConvStatus @default(OPEN)
+  aiPaused             Boolean    @default(false)
+  aiPausedUntil        DateTime?
+  humanTakeoverAt      DateTime?
+  lastTakeoverNoticeAt DateTime?
+  lastMsgAt            DateTime   @default(now())
+  messages             Message[]
+  lead                 Lead?
+  createdAt            DateTime   @default(now())
 
   @@index([lastMsgAt])
   @@index([aiPausedUntil])
@@ -112,27 +113,45 @@ enum Sender {
 }
 
 model Lead {
-  id             String       @id @default(cuid())
-  contactId      String
-  contact        Contact      @relation(fields: [contactId], references: [id])
-  conversationId String       @unique
-  conversation   Conversation @relation(fields: [conversationId], references: [id])
-  temperature    Temperature  @default(COLD)
-  status         LeadStatus   @default(NEW)
-  eventType      String?
-  eventDate      DateTime?
-  guestCount     Int?
-  location       String?
-  budget         String?
-  style          String?
-  summary        String?      @db.Text
-  rawData        Json?
-  attendDraft    Json?
-  score          Int          @default(0)
-  createdAt      DateTime     @default(now())
-  updatedAt      DateTime     @updatedAt
+  id               String        @id @default(cuid())
+  contactId        String
+  contact          Contact       @relation(fields: [contactId], references: [id])
+  conversationId   String        @unique
+  conversation     Conversation  @relation(fields: [conversationId], references: [id])
+  temperature      Temperature   @default(COLD)
+  status           LeadStatus    @default(NEW)
+  eventType        String?
+  eventDate        DateTime?
+  guestCount       Int?
+  location         String?
+  budget           String?
+  style            String?
+  summary          String?       @db.Text
+  rawData          Json?
+  attendDraft      Json?
+  score            Int           @default(0)
+  attendCode       String?       @unique
+  serviceStartedAt DateTime?
+  followupCount    Int           @default(0)
+  lastFollowupAt   DateTime?
+  inspirations     Inspiration[]
+  createdAt        DateTime      @default(now())
+  updatedAt        DateTime      @updatedAt
 
   @@index([temperature, status])
+}
+
+model Inspiration {
+  id        String   @id @default(cuid())
+  leadId    String
+  lead      Lead     @relation(fields: [leadId], references: [id], onDelete: Cascade)
+  type      String
+  url       String   @db.Text
+  caption   String?  @db.Text
+  source    String?
+  createdAt DateTime @default(now())
+
+  @@index([leadId, createdAt])
 }
 
 enum Temperature {

@@ -2,6 +2,15 @@
 
 import { useEffect, useRef, useState } from "react";
 
+type Inspiration = {
+  id: string;
+  type: "image" | "link";
+  url: string;
+  caption: string | null;
+  source: string | null;
+  createdAt: string;
+};
+
 type Lead = {
   id: string;
   eventType: string | null;
@@ -10,6 +19,8 @@ type Lead = {
   location: string | null;
   budget: string | null;
   summary: string | null;
+  attendCode?: string | null;
+  inspirations?: Inspiration[];
   attendDraft?: AttendDraft | null;
   contact: { id: string; name: string | null; phone: string };
   conversation: { id: string };
@@ -223,6 +234,7 @@ export default function AttendModal({ lead, isNew, onClose, onUpdated }: Props) 
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
           status: "IN_SERVICE",
+          serviceStartedAt: new Date().toISOString(),
           eventType,
           eventDate: eventDate || null,
           guestCount: guestCount ? Number(guestCount) : null,
@@ -474,9 +486,56 @@ export default function AttendModal({ lead, isNew, onClose, onUpdated }: Props) 
           {/* Step 1 — Ficha */}
           {step === 1 && (
             <div className={`space-y-6 ${meetingMode ? "text-xl" : ""}`}>
-              <h3 className={`font-display ${meetingMode ? "text-4xl" : "text-2xl"} mb-6`}>
-                Ficha do Evento
-              </h3>
+              <div className="flex items-center justify-between flex-wrap gap-3 mb-6">
+                <h3 className={`font-display ${meetingMode ? "text-4xl" : "text-2xl"}`}>
+                  Ficha do Evento
+                </h3>
+                {lead?.attendCode && (
+                  <div className="inline-flex items-center gap-2 border border-gold/40 text-gold px-3 py-1.5 text-xs uppercase tracking-widest">
+                    <span className="opacity-60">Código:</span> {lead.attendCode}
+                  </div>
+                )}
+              </div>
+
+              {/* Inspirações enviadas */}
+              {lead?.inspirations && lead.inspirations.length > 0 && (
+                <div className="luxury-glass p-4 rounded-sm">
+                  <div className="text-[10px] uppercase tracking-[0.3em] text-gold mb-3">
+                    ✨ Inspirações enviadas pelo cliente ({lead.inspirations.length})
+                  </div>
+                  <div className="grid grid-cols-2 md:grid-cols-4 gap-3">
+                    {lead.inspirations.map((insp) => (
+                      <a
+                        key={insp.id}
+                        href={insp.url}
+                        target="_blank"
+                        rel="noopener"
+                        className="block aspect-square bg-bg-soft border border-line hover:border-gold transition-colors overflow-hidden relative group"
+                        title={insp.caption || `${insp.source || insp.type}`}
+                      >
+                        {insp.type === "image" ? (
+                          // eslint-disable-next-line @next/next/no-img-element
+                          <img
+                            src={insp.url}
+                            alt={insp.caption || ""}
+                            className="w-full h-full object-cover group-hover:scale-105 transition-transform"
+                            onError={(e) => {
+                              (e.currentTarget as HTMLImageElement).style.display = "none";
+                            }}
+                          />
+                        ) : (
+                          <div className="flex flex-col items-center justify-center h-full text-fg-muted p-3">
+                            <div className="text-3xl mb-1">🔗</div>
+                            <div className="text-[10px] uppercase tracking-widest">
+                              {insp.source || "link"}
+                            </div>
+                          </div>
+                        )}
+                      </a>
+                    ))}
+                  </div>
+                </div>
+              )}
               <div className="grid md:grid-cols-2 gap-4">
                 {isNew && (
                   <>

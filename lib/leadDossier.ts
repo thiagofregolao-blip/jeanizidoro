@@ -19,7 +19,7 @@ export async function buildLeadDossier(conversationId: string): Promise<string> 
     where: { id: conversationId },
     include: {
       contact: true,
-      lead: true,
+      lead: { include: { inspirations: { orderBy: { createdAt: "desc" }, take: 10 } } },
     },
   });
   if (!conv) return "";
@@ -53,6 +53,7 @@ export async function buildLeadDossier(conversationId: string): Promise<string> 
   // Evento
   if (lead) {
     lines.push("## 🎉 Evento");
+    if (lead.attendCode) lines.push(`- **Código de atendimento**: ${lead.attendCode}`);
     if (lead.eventType) lines.push(`- **Tipo**: ${lead.eventType}`);
     if (lead.eventDate) {
       const d = new Date(lead.eventDate);
@@ -67,6 +68,19 @@ export async function buildLeadDossier(conversationId: string): Promise<string> 
     if (lead.summary) {
       lines.push(`- **Resumo**: ${lead.summary}`);
     }
+    lines.push("");
+  }
+
+  // Inspirações enviadas (Feature 1)
+  if (lead?.inspirations && lead.inspirations.length > 0) {
+    lines.push("## ✨ Inspirações enviadas pelo cliente");
+    for (const insp of lead.inspirations.slice(0, 8)) {
+      const label = insp.type === "image" ? "📷 imagem" : `🔗 ${insp.source || "link"}`;
+      lines.push(`- ${label}${insp.caption ? ` — "${insp.caption}"` : ""}`);
+    }
+    lines.push(
+      `\n⚠️ Cliente mandou ${lead.inspirations.length} referência(s). Nunca prometa cópia — sempre mencione "inspiração" e "criar algo único".`
+    );
     lines.push("");
   }
 

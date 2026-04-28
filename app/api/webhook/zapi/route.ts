@@ -46,6 +46,10 @@ export async function POST(req: NextRequest) {
             orderBy: { createdAt: "desc" },
           });
           if (conv) {
+            // Antes de gravar a msg do Jean, avisa o cliente se Marina foi a última a falar
+            const { maybeSendTakeoverNotice } = await import("@/lib/takeover");
+            await maybeSendTakeoverNotice(conv.id);
+
             await prisma.message.create({
               data: {
                 conversationId: conv.id,
@@ -112,6 +116,7 @@ export async function POST(req: NextRequest) {
       text,
       senderName: payload.senderName,
       zapiMessageId: payload.messageId,
+      rawPayload: payload,
     })
       .then(async () => {
         await prisma.webhookLog.update({ where: { id: log.id }, data: { processed: true } });

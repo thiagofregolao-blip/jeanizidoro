@@ -12,6 +12,7 @@ export default async function AppLayout({ children }: { children: React.ReactNod
           <div className="text-[9px] tracking-[0.3em] uppercase text-fg-muted mt-1">CRM</div>
         </Link>
 
+        <NavLink href="/app/dashboard">Dashboard</NavLink>
         <NavLink href="/app">Leads</NavLink>
         <NavLink href="/app/inbox">Inbox</NavLink>
         <NavLink href="/app/agenda">Agenda</NavLink>
