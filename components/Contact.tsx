@@ -53,7 +53,7 @@ export default function Contact() {
 
         <div className="md:col-span-4 flex flex-col gap-6">
           <a
-            href="https://wa.me/5511999999999?text=Ol%C3%A1%20Jean%2C%20gostaria%20de%20um%20or%C3%A7amento"
+            href="https://wa.me/5543984991295?text=Ol%C3%A1!%20Vim%20do%20site%2C%20gostaria%20de%20um%20or%C3%A7amento."
             target="_blank"
             rel="noopener"
             className="contact-side group luxury-glass p-8 rounded-sm block transition-all duration-500 hover:border-gold/40"
@@ -63,13 +63,13 @@ export default function Contact() {
               WhatsApp
             </div>
             <div className="font-display text-3xl group-hover:text-gold transition-colors">
-              +55 11 99999-9999
+              +55 (43) 9 8499-1295
             </div>
             <div className="text-fg-muted text-sm mt-2">Orçamentos e briefing</div>
           </a>
 
           <a
-            href="mailto:contato@jeanizidoro.com.br"
+            href="mailto:arq.jeanizidoro@gmail.com"
             className="contact-side group luxury-glass p-8 rounded-sm block transition-all duration-500 hover:border-gold/40"
             data-cursor="hover"
           >
@@ -77,7 +77,7 @@ export default function Contact() {
               Email
             </div>
             <div className="font-display text-2xl group-hover:text-gold transition-colors break-all">
-              contato@jeanizidoro.com.br
+              arq.jeanizidoro@gmail.com
             </div>
           </a>
 

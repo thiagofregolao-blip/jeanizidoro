@@ -250,6 +250,26 @@ export default function AgendaView() {
     await load();
   }
 
+  const [seeding, setSeeding] = useState(false);
+  async function seed2026() {
+    if (
+      !confirm(
+        "Popular a agenda de 2026 com os 84 eventos da tabela inicial?\n\nIsso vai apagar os eventos com título 'Evento' já existentes em 2026 antes de inserir os novos."
+      )
+    )
+      return;
+    setSeeding(true);
+    const res = await fetch("/api/appointments/seed-2026", { method: "POST" });
+    const d = await res.json();
+    setSeeding(false);
+    if (res.ok) {
+      alert(`✓ ${d.created} eventos criados em 2026`);
+      await load();
+    } else {
+      alert(`Erro: ${d.error || "desconhecido"}`);
+    }
+  }
+
   if (loading) return <div className="text-fg-muted">Carregando...</div>;
 
   const isCurrentMonth = viewYear === today.getFullYear() && viewMonth === today.getMonth();
@@ -276,16 +296,27 @@ export default function AgendaView() {
           )}
         </div>
 
-        <button
-          onClick={toggleSelectMode}
-          className={`text-xs uppercase tracking-[0.2em] border px-4 py-2 transition-colors ${
-            selectMode
-              ? "border-gold text-bg bg-gold"
-              : "border-gold/40 text-gold hover:bg-gold/10"
-          }`}
-        >
-          {selectMode ? `✓ Marcar vários (${selectedDays.size})` : "Marcar vários"}
-        </button>
+        <div className="flex gap-2">
+          {appointments.length === 0 && (
+            <button
+              onClick={seed2026}
+              disabled={seeding}
+              className="text-xs uppercase tracking-[0.2em] bg-gold text-bg px-4 py-2 hover:bg-fg transition-colors disabled:opacity-50"
+            >
+              {seeding ? "Populando..." : "📥 Popular agenda 2026"}
+            </button>
+          )}
+          <button
+            onClick={toggleSelectMode}
+            className={`text-xs uppercase tracking-[0.2em] border px-4 py-2 transition-colors ${
+              selectMode
+                ? "border-gold text-bg bg-gold"
+                : "border-gold/40 text-gold hover:bg-gold/10"
+            }`}
+          >
+            {selectMode ? `✓ Marcar vários (${selectedDays.size})` : "Marcar vários"}
+          </button>
+        </div>
       </div>
 
       {/* Atalhos quando selectMode */}

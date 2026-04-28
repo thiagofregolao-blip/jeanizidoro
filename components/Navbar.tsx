@@ -53,7 +53,9 @@ export default function Navbar() {
             ◉ Acesso
           </a>
           <a
-            href="#contato"
+            href="https://wa.me/5543984991295?text=Ol%C3%A1!%20Vim%20do%20site%2C%20gostaria%20de%20um%20or%C3%A7amento."
+            target="_blank"
+            rel="noopener"
             className="inline-flex items-center gap-2 text-sm uppercase tracking-widest border border-gold/40 text-gold px-6 py-3 rounded-full hover:bg-gold hover:text-bg transition-all duration-500"
           >
             Orçamento

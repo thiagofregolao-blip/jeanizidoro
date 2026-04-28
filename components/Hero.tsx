@@ -128,9 +128,12 @@ export default function Hero() {
       </div>
 
       <div className="hero-text-wrap relative z-10 h-full flex flex-col justify-end pb-24 md:pb-32 px-6 md:px-12 max-w-[1600px] mx-auto">
-        <div className="hero-meta flex items-center gap-4 mb-10 text-[11px] tracking-[0.3em] uppercase text-fg-muted">
-          <span className="w-10 h-px bg-gold" />
-          <span>Arquitetura & Eventos</span>
+        <div className="hero-meta flex items-start gap-4 mb-10 text-[11px] tracking-[0.25em] uppercase text-fg-muted">
+          <span className="w-10 h-px bg-gold mt-2 shrink-0" />
+          <div className="flex flex-col gap-1.5 leading-relaxed">
+            <span>Arquiteto que transforma espaços</span>
+            <span className="text-gold">Criador de eventos com alma e propósito</span>
+          </div>
         </div>
 
         <h1 className="font-display text-[clamp(3.2rem,10vw,10rem)] leading-[0.95] tracking-tight">

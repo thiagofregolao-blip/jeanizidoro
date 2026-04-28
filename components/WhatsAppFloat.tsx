@@ -13,7 +13,7 @@ export default function WhatsAppFloat() {
 
   return (
     <a
-      href="https://wa.me/5511999999999?text=Ol%C3%A1%20Jean%2C%20gostaria%20de%20um%20or%C3%A7amento"
+      href="https://wa.me/5543984991295?text=Ol%C3%A1!%20Vim%20do%20site%2C%20gostaria%20de%20um%20or%C3%A7amento."
       target="_blank"
       rel="noopener"
       aria-label="WhatsApp"
