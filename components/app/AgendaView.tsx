@@ -297,15 +297,14 @@ export default function AgendaView() {
         </div>
 
         <div className="flex gap-2">
-          {appointments.length === 0 && (
-            <button
-              onClick={seed2026}
-              disabled={seeding}
-              className="text-xs uppercase tracking-[0.2em] bg-gold text-bg px-4 py-2 hover:bg-fg transition-colors disabled:opacity-50"
-            >
-              {seeding ? "Populando..." : "📥 Popular agenda 2026"}
-            </button>
-          )}
+          <button
+            onClick={seed2026}
+            disabled={seeding}
+            title="Insere os 84 eventos da tabela inicial em 2026 (substitui os antigos com título 'Evento')"
+            className="text-xs uppercase tracking-[0.2em] bg-gold text-bg px-4 py-2 hover:bg-fg transition-colors disabled:opacity-50"
+          >
+            {seeding ? "Populando..." : "📥 Popular agenda 2026"}
+          </button>
           <button
             onClick={toggleSelectMode}
             className={`text-xs uppercase tracking-[0.2em] border px-4 py-2 transition-colors ${
