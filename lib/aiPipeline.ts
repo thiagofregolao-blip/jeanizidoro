@@ -8,7 +8,7 @@ import {
   updateRecentInteractions,
   type ContactProfile,
 } from "./claude";
-import { getAppointmentsContext } from "./appointments";
+import { getAppointmentsContext, verifyDatesInText, getUpcomingMeetingSlots } from "./appointments";
 import { buildLeadDossier } from "./leadDossier";
 import { captureFromMessage, messageHasInspirationHint } from "./inspirations";
 import type { ZapiInbound } from "./zapi";
@@ -378,10 +378,12 @@ export async function processInboundMessage(args: {
   // 7. initial micro-delay
   await sleep(rand(2000, 5000));
 
-  // 7.5 agenda + dossiê do lead (non-blocking failure)
-  const [calendarContext, leadDossier] = await Promise.all([
+  // 7.5 agenda + dossiê do lead + verificação autoritativa + slots de reunião
+  const [calendarContext, leadDossier, dateVerification, meetingSlotsContext] = await Promise.all([
     getAppointmentsContext(365),
     buildLeadDossier(conv.id),
+    verifyDatesInText(text),
+    getUpcomingMeetingSlots(14),
   ]);
 
   // 8. generate reply (with retry + timeout já nos wrappers)
@@ -403,10 +405,11 @@ export async function processInboundMessage(args: {
 
   const hasInspiration = rawPayload ? messageHasInspirationHint(rawPayload) : false;
 
-  console.log(`[PIPELINE] calling claude, tone=${detectedTone}, firstInteraction=${isFirstInteraction}, hasInspiration=${hasInspiration}`);
+  console.log(`[PIPELINE] calling gemini, tone=${detectedTone}, firstInteraction=${isFirstInteraction}, hasInspiration=${hasInspiration}`);
   let chunks: string[] = [];
+  let meetingProposed: { date: string; time: string } | null = null;
   try {
-    chunks = await generateReply({
+    const reply = await generateReply({
       persona: cfg.personaPrompt,
       businessContext: cfg.businessContext,
       history: formatted,
@@ -415,15 +418,19 @@ export async function processInboundMessage(args: {
       detectedTone,
       isFirstInteraction,
       calendarContext,
+      dateVerification,
+      meetingSlotsContext,
       humanTakeoverContext: resumeAfterHumanContext,
       leadDossier,
       attendCode,
       hasInspiration,
     });
+    chunks = reply.chunks;
+    meetingProposed = reply.meetingProposed ?? null;
   } catch (e) {
     const msg = e instanceof Error ? e.message : String(e);
-    console.error(`[PIPELINE] claude FAILED:`, msg);
-    await logError("claude:reply", msg, { phone, contactId: contact.id });
+    console.error(`[PIPELINE] gemini FAILED:`, msg);
+    await logError("gemini:reply", msg, { phone, contactId: contact.id });
     const breaker = await recordError();
     if (breaker.tripped) {
       await alertOwner(
@@ -457,6 +464,43 @@ export async function processInboundMessage(args: {
     });
     // envia só a confirmação neutra (não arrisca o texto alucinado)
     chunks = [...FALLBACK_REPLIES.generic];
+  }
+
+  // 8.7 auto-criar reunião se Marina detectou confirmação de horário
+  if (meetingProposed && meetingProposed.date && meetingProposed.time) {
+    try {
+      const dateObj = new Date(meetingProposed.date + "T00:00:00");
+      // calcula endTime = startTime + 30 min
+      const [hh, mm] = meetingProposed.time.split(":").map((s) => parseInt(s, 10));
+      const startMin = hh * 60 + (mm || 0);
+      const endMin = startMin + 30;
+      const endTime = `${String(Math.floor(endMin / 60)).padStart(2, "0")}:${String(endMin % 60).padStart(2, "0")}`;
+      const created = await prisma.appointment.create({
+        data: {
+          date: dateObj,
+          slot: "DAY",
+          startTime: meetingProposed.time,
+          endTime,
+          kind: "MEETING",
+          title: `Reunião com ${contact.name || phone}`,
+          contactId: contact.id,
+          notes: "Agendada automaticamente pela Marina via WhatsApp",
+        },
+      });
+      const dateLabel = dateObj.toLocaleDateString("pt-BR", {
+        weekday: "long", day: "2-digit", month: "long", timeZone: "America/Sao_Paulo",
+      });
+      await alertOwner(
+        `📅 Nova reunião agendada pela Marina\nCliente: ${contact.name || phone}\nQuando: ${dateLabel} às ${meetingProposed.time}\nConfirma com ele(a)? Se quiser remarcar, abre o painel.`
+      );
+      console.log(`[PIPELINE] meeting auto-created id=${created.id} ${meetingProposed.date} ${meetingProposed.time}`);
+    } catch (e) {
+      console.error("[PIPELINE] failed to auto-create meeting", e);
+      await logError("meeting:auto_create", e instanceof Error ? e.message : String(e), {
+        phone,
+        meetingProposed,
+      });
+    }
   }
 
   console.log(`[PIPELINE] sending ${chunks.length} chunks`);

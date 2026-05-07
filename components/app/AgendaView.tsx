@@ -8,6 +8,8 @@ type Appointment = {
   id: string;
   date: string;
   slot: SlotType;
+  startTime: string | null;
+  endTime: string | null;
   allowsMore: boolean;
   title: string;
   notes: string | null;
@@ -44,6 +46,8 @@ export default function AgendaView() {
   const [formAllowsMore, setFormAllowsMore] = useState(false);
   const [formTitle, setFormTitle] = useState("Evento");
   const [formNotes, setFormNotes] = useState("");
+  const [formStartTime, setFormStartTime] = useState("");
+  const [formEndTime, setFormEndTime] = useState("");
 
   async function load() {
     setLoading(true);
@@ -190,6 +194,8 @@ export default function AgendaView() {
     setFormAllowsMore(false);
     setFormTitle("Evento");
     setFormNotes("");
+    setFormStartTime("");
+    setFormEndTime("");
     setShowForm(true);
   }
   function openEditForm(appt: Appointment) {
@@ -198,6 +204,8 @@ export default function AgendaView() {
     setFormAllowsMore(appt.allowsMore);
     setFormTitle(appt.title);
     setFormNotes(appt.notes || "");
+    setFormStartTime(appt.startTime || "");
+    setFormEndTime(appt.endTime || "");
     setShowForm(true);
   }
 
@@ -218,6 +226,8 @@ export default function AgendaView() {
           allowsMore: formAllowsMore,
           title: formTitle,
           notes: formNotes,
+          startTime: formStartTime || null,
+          endTime: formEndTime || null,
         }),
       });
     } else if (dates.length > 0) {
@@ -231,6 +241,8 @@ export default function AgendaView() {
           allowsMore: formAllowsMore,
           title: formTitle,
           notes: formNotes,
+          startTime: formStartTime || null,
+          endTime: formEndTime || null,
         }),
       });
     }
@@ -381,7 +393,7 @@ export default function AgendaView() {
                           key={a.id}
                           className={`text-[9px] md:text-[10px] px-1 py-0.5 truncate leading-tight ${eventBadgeClass(a.slot)}`}
                         >
-                          {SLOT_LABELS[a.slot].emoji} {a.title}
+                          {SLOT_LABELS[a.slot].emoji} {a.startTime ? `${a.startTime} ` : ""}{a.title}
                         </div>
                       ))}
                       {dayAppts.length > 3 && (
@@ -436,7 +448,8 @@ export default function AgendaView() {
                     </div>
                   </div>
                   <div className="text-xs text-fg-muted">
-                    {SLOT_LABELS[a.slot].emoji} {SLOT_LABELS[a.slot].label}
+                    {SLOT_LABELS[a.slot].emoji}{" "}
+                    {a.startTime && a.endTime ? `${a.startTime} – ${a.endTime}` : SLOT_LABELS[a.slot].label}
                     {a.allowsMore && " · 🔓 aceita encaixar outro"}
                   </div>
                   {a.notes && <div className="text-xs text-fg-muted mt-1 italic">{a.notes}</div>}
@@ -508,6 +521,32 @@ export default function AgendaView() {
                   className="w-full bg-transparent border border-line px-3 py-2 outline-none focus:border-gold"
                   placeholder="Ex: Casamento Maria, Reunião com cliente..."
                 />
+              </div>
+
+              {/* Horário (opcional) */}
+              <div>
+                <label className="block text-[10px] uppercase tracking-widest text-fg-muted mb-2">Horário específico (opcional)</label>
+                <div className="grid grid-cols-2 gap-3">
+                  <div>
+                    <div className="text-[9px] uppercase tracking-widest text-fg-muted mb-1">Início</div>
+                    <input
+                      type="time"
+                      value={formStartTime}
+                      onChange={(e) => setFormStartTime(e.target.value)}
+                      className="w-full bg-transparent border border-line px-3 py-2 outline-none focus:border-gold"
+                    />
+                  </div>
+                  <div>
+                    <div className="text-[9px] uppercase tracking-widest text-fg-muted mb-1">Fim</div>
+                    <input
+                      type="time"
+                      value={formEndTime}
+                      onChange={(e) => setFormEndTime(e.target.value)}
+                      className="w-full bg-transparent border border-line px-3 py-2 outline-none focus:border-gold"
+                    />
+                  </div>
+                </div>
+                <div className="text-[10px] text-fg-muted mt-1">Ex: 19:00 às 02:00 (madrugada permitida)</div>
               </div>
 
               {/* Notes */}

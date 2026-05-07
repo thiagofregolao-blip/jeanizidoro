@@ -40,7 +40,7 @@ export async function POST(req: NextRequest) {
         {
           OR: [{ temperature: { in: ["HOT", "WARM"] } }, { status: "IN_SERVICE" }],
         },
-        { status: { notIn: ["WON", "LOST"] } },
+        { status: { notIn: ["WON", "LOST", "FINISHED"] } },
         { followupCount: { lt: MAX_FOLLOWUPS } },
         { conversation: { lastMsgAt: { lt: cutoffLastMsg } } },
         {
@@ -94,7 +94,7 @@ export async function POST(req: NextRequest) {
         content: m.content,
       }));
 
-      const chunks = await generateReply({
+      const reply = await generateReply({
         persona: "Você é Marina, atendente virtual de Jean Izidoro.",
         businessContext:
           "Decoração de Casamentos, Assessoria Cerimonial, Decoração de Festas Infantis.",
@@ -108,6 +108,7 @@ export async function POST(req: NextRequest) {
         attendCode: lead.attendCode,
         mode: "followup",
       });
+      const chunks = reply.chunks;
 
       // Envia chunks
       for (let i = 0; i < chunks.length; i++) {

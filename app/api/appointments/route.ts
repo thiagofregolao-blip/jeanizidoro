@@ -46,6 +46,8 @@ export async function POST(req: NextRequest) {
       notes: body.notes || null,
       contactId: body.contactId || null,
       leadId: body.leadId || null,
+      startTime: body.startTime || null,
+      endTime: body.endTime || null,
     }));
     const result = await prisma.appointment.createMany({ data, skipDuplicates: false });
     return NextResponse.json({ ok: true, created: result.count });
@@ -64,7 +66,59 @@ export async function POST(req: NextRequest) {
       notes: body.notes || null,
       contactId: body.contactId || null,
       leadId: body.leadId || null,
+      startTime: body.startTime || null,
+      endTime: body.endTime || null,
+      kind: body.kind === "MEETING" ? "MEETING" : "EVENT",
     },
   });
+
+  // Alerta imediato pro Jean ao criar evento via painel
+  try {
+    const { alertOwner } = await import("@/lib/reliability");
+    const dateLabel = item.date.toLocaleDateString("pt-BR", {
+      weekday: "long", day: "2-digit", month: "long", timeZone: "America/Sao_Paulo",
+    });
+    const timeLabel = item.startTime ? ` às ${item.startTime}` : "";
+    await alertOwner(`📅 Novo na agenda: "${item.title}" em ${dateLabel}${timeLabel}.`);
+  } catch (e) {
+    console.error("alertOwner failed", e);
+  }
+
   return NextResponse.json({ appointment: item });
+}
+
+export async function PATCH(req: NextRequest) {
+  try {
+    await requireSession();
+  } catch {
+    return NextResponse.json({ error: "unauthorized" }, { status: 401 });
+  }
+  const body = await req.json();
+  if (!body.id) return NextResponse.json({ error: "id obrigatório" }, { status: 400 });
+
+  const data: Prisma.AppointmentUpdateInput = {};
+  if (body.date !== undefined) data.date = new Date(body.date + "T00:00:00");
+  if (body.slot !== undefined) data.slot = body.slot as SlotType;
+  if (body.allowsMore !== undefined) data.allowsMore = !!body.allowsMore;
+  if (body.title !== undefined) data.title = body.title;
+  if (body.notes !== undefined) data.notes = body.notes;
+  if (body.startTime !== undefined) data.startTime = body.startTime;
+  if (body.endTime !== undefined) data.endTime = body.endTime;
+  if (body.kind !== undefined) data.kind = body.kind === "MEETING" ? "MEETING" : "EVENT";
+
+  const item = await prisma.appointment.update({ where: { id: body.id }, data });
+  return NextResponse.json({ appointment: item });
+}
+
+export async function DELETE(req: NextRequest) {
+  try {
+    await requireSession();
+  } catch {
+    return NextResponse.json({ error: "unauthorized" }, { status: 401 });
+  }
+  const url = new URL(req.url);
+  const id = url.searchParams.get("id");
+  if (!id) return NextResponse.json({ error: "id obrigatório" }, { status: 400 });
+  await prisma.appointment.delete({ where: { id } });
+  return NextResponse.json({ ok: true });
 }

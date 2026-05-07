@@ -24,7 +24,7 @@ export async function GET() {
           OR: [{ temperature: { in: ["HOT", "WARM"] } }, { status: "IN_SERVICE" }],
         },
         { conversation: { lastMsgAt: { lt: oneDayAgo } } },
-        { status: { notIn: ["WON", "LOST"] } },
+        { status: { notIn: ["WON", "LOST", "FINISHED"] } },
       ],
     },
     include: {

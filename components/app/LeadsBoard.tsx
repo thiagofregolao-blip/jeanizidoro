@@ -45,6 +45,7 @@ const PHASE_LABEL: Record<string, string> = {
   CONTRACT_SENT: "Contrato",
   WON: "Fechado",
   LOST: "Perdido",
+  FINISHED: "Finalizado",
 };
 
 function getPhaseLabel(l: Lead): string {
@@ -53,7 +54,7 @@ function getPhaseLabel(l: Lead): string {
   return "Novo";
 }
 
-type TabKey = "HOT" | "WARM" | "COLD" | "IN_SERVICE" | "WON";
+type TabKey = "HOT" | "WARM" | "COLD" | "IN_SERVICE" | "WON" | "FINISHED";
 
 const TABS: { key: TabKey; label: string; emoji: string; accent: string }[] = [
   { key: "HOT", label: "Quentes", emoji: "🔥", accent: "text-red-400 border-red-500/50" },
@@ -61,9 +62,11 @@ const TABS: { key: TabKey; label: string; emoji: string; accent: string }[] = [
   { key: "COLD", label: "Frios", emoji: "❄️", accent: "text-blue-400 border-blue-500/50" },
   { key: "IN_SERVICE", label: "Em Atendimento", emoji: "✅", accent: "text-gold border-gold/60" },
   { key: "WON", label: "Fechados", emoji: "✓", accent: "text-green-400 border-green-500/50" },
+  { key: "FINISHED", label: "Finalizados", emoji: "🏁", accent: "text-fg-muted border-line" },
 ];
 
 function bucketFor(l: Lead): TabKey {
+  if (l.status === "FINISHED") return "FINISHED";
   if (l.status === "WON") return "WON";
   if (["IN_SERVICE", "PROPOSAL_SENT", "CONTRACT_SENT"].includes(l.status)) return "IN_SERVICE";
   return l.temperature;
@@ -79,6 +82,25 @@ export default function LeadsBoard() {
   const [sortBy, setSortBy] = useState<SortKey>("recent");
   const [openLead, setOpenLead] = useState<Lead | null>(null);
   const [newAttendOpen, setNewAttendOpen] = useState(false);
+  const [finishingId, setFinishingId] = useState<string | null>(null);
+
+  async function finishLead(l: Lead) {
+    if (!confirm(`Finalizar atendimento de ${l.contact.name || formatPhone(l.contact.phone)}?\n\nO lead vai pra aba "Finalizados". A IA continua respondendo normalmente.`)) return;
+    setFinishingId(l.id);
+    try {
+      const res = await fetch(`/api/leads/${l.id}`, {
+        method: "PATCH",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ status: "FINISHED" }),
+      });
+      if (!res.ok) throw new Error("falhou");
+      await load();
+    } catch {
+      alert("Erro ao finalizar. Tenta de novo.");
+    } finally {
+      setFinishingId(null);
+    }
+  }
 
   async function load() {
     const res = await fetch("/api/leads");
@@ -94,7 +116,7 @@ export default function LeadsBoard() {
   }, []);
 
   const counts = useMemo(() => {
-    const c: Record<TabKey, number> = { HOT: 0, WARM: 0, COLD: 0, IN_SERVICE: 0, WON: 0 };
+    const c: Record<TabKey, number> = { HOT: 0, WARM: 0, COLD: 0, IN_SERVICE: 0, WON: 0, FINISHED: 0 };
     for (const l of leads) c[bucketFor(l)]++;
     return c;
   }, [leads]);
@@ -321,6 +343,16 @@ export default function LeadsBoard() {
                     >
                       Atender
                     </button>
+                    {l.status !== "FINISHED" && l.status !== "WON" && l.status !== "LOST" && (
+                      <button
+                        onClick={() => finishLead(l)}
+                        disabled={finishingId === l.id}
+                        title="Finalizar atendimento (vai pra aba Finalizados)"
+                        className="text-xs uppercase tracking-[0.2em] border border-line text-fg-muted hover:text-fg hover:border-fg/40 px-3 py-2 transition-colors whitespace-nowrap disabled:opacity-50"
+                      >
+                        {finishingId === l.id ? "..." : "🏁 Finalizar"}
+                      </button>
+                    )}
                   </div>
 
                   {/* Resumo (só mobile ou em largura reduzida) */}

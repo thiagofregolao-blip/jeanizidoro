@@ -40,26 +40,49 @@ model Contact {
 }
 
 model Appointment {
-  id         String   @id @default(cuid())
-  date       DateTime
-  slot       SlotType
-  allowsMore Boolean  @default(false)
-  title      String   @default("Evento")
-  notes      String?  @db.Text
-  contactId  String?
-  contact    Contact? @relation(fields: [contactId], references: [id], onDelete: SetNull)
-  leadId     String?
-  createdAt  DateTime @default(now())
-  updatedAt  DateTime @updatedAt
+  id             String          @id @default(cuid())
+  date           DateTime
+  slot           SlotType
+  startTime      String?         // "HH:mm" formato 24h, ex "19:00"
+  endTime        String?         // "HH:mm", ex "02:00"
+  kind           AppointmentKind @default(EVENT)
+  allowsMore     Boolean         @default(false)
+  title          String          @default("Evento")
+  notes          String?         @db.Text
+  contactId      String?
+  contact        Contact?        @relation(fields: [contactId], references: [id], onDelete: SetNull)
+  leadId         String?
+  reminderSentAt DateTime?
+  createdAt      DateTime        @default(now())
+  updatedAt      DateTime        @updatedAt
 
   @@index([date])
   @@index([slot])
+  @@index([reminderSentAt])
 }
 
 enum SlotType {
   FULL_DAY
   DAY
   NIGHT
+}
+
+enum AppointmentKind {
+  EVENT
+  MEETING
+}
+
+model AvailabilityRule {
+  id        String   @id @default(cuid())
+  weekday   Int      // 0=domingo ... 6=sábado
+  startTime String   // "HH:mm"
+  endTime   String
+  label     String   @default("Reuniões com clientes")
+  active    Boolean  @default(true)
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  @@index([weekday, active])
 }
 
 model Conversation {
@@ -167,6 +190,7 @@ enum LeadStatus {
   CONTRACT_SENT
   WON
   LOST
+  FINISHED
 }
 
 model AiConfig {

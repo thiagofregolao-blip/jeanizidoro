@@ -1,12 +1,53 @@
-import Anthropic from "@anthropic-ai/sdk";
+// Adapter: mantém a interface antiga (nome do arquivo `claude.ts` por compatibilidade)
+// mas internamente usa Gemini 2.5 Flash. Cliente Anthropic mantido como fallback opcional.
+import { GoogleGenAI } from "@google/genai";
 import { retry, withTimeout } from "./reliability";
 
-export const anthropic = new Anthropic({ apiKey: process.env.ANTHROPIC_API_KEY, maxRetries: 0 });
+const GEMINI_TIMEOUT_MS = 25000;
+const FLASH = "gemini-2.5-flash";
+const FLASH_LITE = "gemini-2.5-flash-lite";
 
-const CLAUDE_TIMEOUT_MS = 25000;
+const ai = new GoogleGenAI({ apiKey: process.env.GOOGLE_AI_API_KEY || "" });
 
-const HAIKU = "claude-haiku-4-5-20251001";
-const SONNET = "claude-sonnet-4-6";
+// converte histórico { user|assistant } pra formato Gemini { user|model }
+function toGeminiContents(history: { role: "user" | "assistant"; content: string }[]) {
+  return history.map((h) => ({
+    role: h.role === "assistant" ? "model" : "user",
+    parts: [{ text: h.content }],
+  }));
+}
+
+async function geminiText(opts: {
+  model: string;
+  systemInstruction: string;
+  contents: { role: string; parts: { text: string }[] }[];
+  temperature?: number;
+  maxOutputTokens?: number;
+  responseMimeType?: string;
+  responseSchema?: object;
+  label: string;
+}): Promise<string> {
+  const res = await retry(
+    () =>
+      withTimeout(
+        ai.models.generateContent({
+          model: opts.model,
+          contents: opts.contents,
+          config: {
+            systemInstruction: opts.systemInstruction,
+            temperature: opts.temperature,
+            maxOutputTokens: opts.maxOutputTokens,
+            ...(opts.responseMimeType ? { responseMimeType: opts.responseMimeType } : {}),
+            ...(opts.responseSchema ? { responseSchema: opts.responseSchema } : {}),
+          },
+        }),
+        GEMINI_TIMEOUT_MS,
+        opts.label
+      ),
+    { retries: 2, baseDelayMs: 1500, label: opts.label }
+  );
+  return res.text || "";
+}
 
 export type LeadExtraction = {
   temperature: "HOT" | "WARM" | "COLD";
@@ -30,11 +71,15 @@ export type ContactProfile = {
   pastEvents?: string[];
   notesFromAi?: string[];
   lastTopics?: string[];
-  // Novo: resumo estruturado das últimas trocas (atualizado pelo Haiku em background)
   recentInteractions?: string[];
   clientAlreadyAsked?: string[];
   sofiaAlreadyExplained?: string[];
   nextBestAction?: string;
+};
+
+export type MeetingProposal = {
+  date: string;   // "YYYY-MM-DD"
+  time: string;   // "HH:mm"
 };
 
 const CLASSIFY_SCHEMA = `
@@ -57,14 +102,9 @@ CRITÉRIOS DE shouldEscalate (seja CONSERVADOR — default é false):
   * PEDIU EXPLICITAMENTE falar com humano/atendente/"falar com Jean"
   * Está reclamando, irritado ou insatisfeito
   * Fez pergunta técnica que só Jean pode responder (ex: projetos passados, assinatura, casos específicos)
-- false em TODOS os outros casos, incluindo:
-  * Cliente querendo agendar reunião (a Marina já faz isso)
-  * Cliente confirmando interesse
-  * Cliente dando informações do evento
-  * Cliente dizendo "vamos agendar", "ok", "perfeito"
-  * Cliente fazendo pergunta normal de orçamento/prazo
+- false em TODOS os outros casos.
 
-IMPORTANTE: score e guestCount DEVEM ser números inteiros JSON (ex: 85, 100), NÃO strings entre aspas.`;
+IMPORTANTE: score e guestCount DEVEM ser números inteiros JSON, NÃO strings.`;
 
 export async function classifyLead(history: { role: "user" | "assistant"; content: string }[]) {
   const lastUserMsgs = history
@@ -73,16 +113,10 @@ export async function classifyLead(history: { role: "user" | "assistant"; conten
     .map((m) => m.content)
     .join("\n");
 
-  const res = await retry(
-    () =>
-      withTimeout(
-        anthropic.messages.create({
-          model: HAIKU,
-          max_tokens: 600,
-          system: [
-            {
-              type: "text",
-              text: `Você é um classificador de leads para Jean Izidoro, arquiteto de eventos (decoração de casamentos, assessoria cerimonial de eventos, decoração de festas infantis).
+  try {
+    const txt = await geminiText({
+      model: FLASH_LITE,
+      systemInstruction: `Você é um classificador de leads para Jean Izidoro, arquiteto de eventos (decoração de casamentos, assessoria cerimonial de eventos, decoração de festas infantis).
 Analise a conversa e extraia dados em JSON estrito seguindo o schema:
 ${CLASSIFY_SCHEMA}
 
@@ -92,20 +126,12 @@ Critérios de temperatura:
 - COLD: só perguntou preço genérico, sem dados concretos, ou apenas curiosidade
 
 Retorne SOMENTE o JSON, sem markdown, sem comentários.`,
-              cache_control: { type: "ephemeral" },
-            },
-          ],
-          messages: [{ role: "user", content: `Mensagens do contato:\n${lastUserMsgs}` }],
-        }),
-        CLAUDE_TIMEOUT_MS,
-        "claude:classify"
-      ),
-    { retries: 2, baseDelayMs: 1500, label: "claude:classify" }
-  );
-
-  const txt = res.content[0].type === "text" ? res.content[0].text : "{}";
-  const cleaned = txt.replace(/```json\n?/g, "").replace(/```/g, "").trim();
-  try {
+      contents: [{ role: "user", parts: [{ text: `Mensagens do contato:\n${lastUserMsgs}` }] }],
+      maxOutputTokens: 600,
+      responseMimeType: "application/json",
+      label: "gemini:classify",
+    });
+    const cleaned = txt.replace(/```json\n?/g, "").replace(/```/g, "").trim();
     return JSON.parse(cleaned) as LeadExtraction;
   } catch {
     return {
@@ -144,6 +170,8 @@ type GenerateReplyInput = {
   detectedTone?: "formal" | "casual" | "mixed";
   isFirstInteraction?: boolean;
   calendarContext?: string;
+  meetingSlotsContext?: string;
+  dateVerification?: string;
   humanTakeoverContext?: string;
   leadDossier?: string;
   attendCode?: string | null;
@@ -151,7 +179,12 @@ type GenerateReplyInput = {
   mode?: "normal" | "followup";
 };
 
-export async function generateReply(input: GenerateReplyInput): Promise<string[]> {
+export type GenerateReplyOutput = {
+  chunks: string[];
+  meetingProposed?: MeetingProposal | null;
+};
+
+export async function generateReply(input: GenerateReplyInput): Promise<GenerateReplyOutput> {
   const {
     persona,
     businessContext,
@@ -161,6 +194,8 @@ export async function generateReply(input: GenerateReplyInput): Promise<string[]
     detectedTone = "mixed",
     isFirstInteraction = false,
     calendarContext = "",
+    meetingSlotsContext = "",
+    dateVerification = "",
     humanTakeoverContext = "",
     leadDossier = "",
     attendCode = null,
@@ -169,16 +204,39 @@ export async function generateReply(input: GenerateReplyInput): Promise<string[]
   } = input;
 
   const dossierBlock = leadDossier
-    ? `\n━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━\n📋 DOSSIÊ DO CLIENTE (MEMÓRIA PERSISTENTE — CONSULTE ANTES DE RESPONDER)\n━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━\n${leadDossier}\n\n⚠️ REGRA: ANTES de responder qualquer coisa, LEIA esse dossiê. Use as informações dele como VERDADE. Se cliente perguntar algo que já está no dossiê (ex: "qual a data do meu evento?", "quanto o Jean me passou de valor?"), responda COM O DADO DO DOSSIÊ. Nunca finja que não lembra — tudo que sabemos sobre o cliente está aí.\n`
+    ? `\n━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━\n📋 DOSSIÊ DO CLIENTE (MEMÓRIA PERSISTENTE — CONSULTE ANTES DE RESPONDER)\n━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━\n${leadDossier}\n\n⚠️ REGRA: ANTES de responder qualquer coisa, LEIA esse dossiê. Use as informações dele como VERDADE. Se cliente perguntar algo que já está no dossiê, responda COM O DADO DO DOSSIÊ.\n`
     : "";
 
   const calendarBlock = calendarContext
-    ? `\n━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━\nAGENDA DO JEAN (use para confirmar disponibilidade)\n━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━\n${calendarContext}\n\nSE o cliente mencionar uma data específica, verifique se está livre antes de animar. Se estiver ocupada, diga algo tipo "deixa eu ver aqui... essa data o Jean já tem compromisso. Você tem flexibilidade pra um fim de semana próximo?" Nunca confirme data como reservada — só o Jean reserva.\n`
+    ? `\n━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━\nAGENDA DO JEAN (use para confirmar disponibilidade)\n━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━\n${calendarContext}\n`
+    : "";
+
+  // 🚨 REGRA DE FERRO — DATAS (anti-alucinação)
+  const dateIronRule = `\n━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+🚨 REGRA DE FERRO — DATAS (LEIA COM ATENÇÃO)
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+NUNCA confirme disponibilidade de uma data específica sem que o status dela apareça
+explicitamente no bloco "AGENDA DO JEAN" ou em "VERIFICAÇÃO ESPECÍFICA".
+
+Se cliente perguntar sobre data X:
+• Está no bloco AGENDA como ❌ OCUPADO → diga claramente que JÁ TEM compromisso. Sugira outra.
+• Está no bloco AGENDA como ⚠️/☀️/🌙 (parcial) → siga a instrução do bloco.
+• NÃO está no bloco AGENDA → diga "vou confirmar com o Jean e te respondo".
+
+NUNCA invente disponibilidade. NUNCA diga "tá disponível" sem confirmação no bloco.
+Em qualquer dúvida → "vou confirmar com o Jean".`;
+
+  const dateVerifyBlock = dateVerification
+    ? `\n━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━\n🔍 VERIFICAÇÃO ESPECÍFICA DE DATA (USE SEM RECONSIDERAR)\n━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━\n${dateVerification}\n`
+    : "";
+
+  const meetingSlotsBlock = meetingSlotsContext
+    ? `\n━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━\n📅 HORÁRIOS DE REUNIÃO PRESENCIAL DISPONÍVEIS\n━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━\n${meetingSlotsContext}\n\nQuando cliente pedir reunião, ofereça 2-3 horários desta lista. Reunião dura ~30 min.\nSE cliente confirmar um horário específico ("pode terça 14h", "ok 15h"), você DEVE preencher o campo "meetingProposed" do JSON com a data e hora confirmadas.\n`
     : "";
 
   const memoryBlock = contactProfile
     ? `
-MEMÓRIA SOBRE ESTE CLIENTE (use com naturalidade, como quem lembra de coisa conversada):
+MEMÓRIA SOBRE ESTE CLIENTE (use com naturalidade):
 - Nome preferido: ${contactProfile.preferredName || contactName || "ainda não sei"}
 - Tom habitual: ${contactProfile.detectedTone || detectedTone}
 - Eventos passados: ${contactProfile.pastEvents?.join("; ") || "nenhum registrado"}
@@ -196,17 +254,14 @@ MEMÓRIA SOBRE ESTE CLIENTE (use com naturalidade, como quem lembra de coisa con
       : "Cliente tom neutro. Seja acolhedor, profissional e caloroso sem ser formal demais.";
 
   const nowBR = new Date().toLocaleString("pt-BR", { timeZone: "America/Sao_Paulo", dateStyle: "full", timeStyle: "short" });
-  const timeContext = `\n━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━\nCONTEXTO TEMPORAL\n━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━\nAgora é ${nowBR} (horário de Brasília).\nUse pra saber se é manhã/tarde/noite e se o cumprimento do cliente é recente ou não.\n`;
+  const timeContext = `\n━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━\nCONTEXTO TEMPORAL\n━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━\nAgora é ${nowBR} (horário de Brasília).\n`;
 
   const firstInteractionNote = isFirstInteraction
-    ? `\n⚠️ PRIMEIRA mensagem deste cliente. Siga OBRIGATORIAMENTE este formato de apresentação em 3 mensagens quebradas com ||:
+    ? `\n⚠️ PRIMEIRA mensagem deste cliente. Siga este formato em 3 mensagens separadas por ||:
 
 Msg 1: Cumprimente + diga seu nome + deixe claro que você é a ATENDENTE VIRTUAL do Jean (assistente, não o Jean) + cite o CÓDIGO DE ATENDIMENTO ${attendCode ? `(${attendCode})` : "(será gerado)"} pra ele guardar
 Msg 2: Explique que vai dar INÍCIO ao atendimento dele colhendo algumas informações, e depois o Jean assume pessoalmente
-Msg 3: Primeira pergunta aberta pra começar (tipo "me conta, que tipo de evento você tá planejando?")
-
-Exemplo (adapte ao tom):
-"Oi! Tudo bem? Eu sou a Marina, atendente virtual aqui do Jean Izidoro 💫 Pra você guardar, seu código de atendimento é ${attendCode || "ATD-2026-XXXX"}.||Vou dar início ao seu atendimento por aqui, colher alguns detalhes do seu evento, e em seguida o Jean pessoalmente entra em contato pra conversar com você ✨||Me conta, que tipo de evento você tá planejando?"
+Msg 3: Primeira pergunta aberta pra começar
 
 NUNCA se passe pelo Jean. Sempre deixe claro que você é ASSISTENTE VIRTUAL dele.`
     : "\nEste cliente JÁ conversou antes. NÃO se apresente de novo. Continue naturalmente.";
@@ -215,124 +270,104 @@ NUNCA se passe pelo Jean. Sempre deixe claro que você é ASSISTENTE VIRTUAL del
     ? `\n━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
 ✨ CLIENTE ENVIOU INSPIRAÇÃO (imagem ou link)
 ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
-O cliente acabou de enviar uma imagem ou link de referência (Instagram/Pinterest).
-
 OBRIGATÓRIO incluir na sua resposta:
-1. Agradeça a referência ("adorei!", "que linda!", "amei a estética", etc — natural com o tom)
-2. Deixe MUITO CLARO: vai usar como INSPIRAÇÃO pra criar algo único, JAMAIS como cópia
-   Exemplos: "vou usar isso como inspiração pra criar algo único pro seu evento" / "vou guardar como referência — o Jean adora se inspirar em coisas assim, mas sempre cria algo autoral pra cada cliente"
-3. Faça UMA pergunta de aprofundamento sobre o que mais ela gostou na imagem (cor? clima? estilo?)
+1. Agradeça a referência
+2. Deixe claro que vai usar como INSPIRAÇÃO pra criar algo único, JAMAIS como cópia
+3. Faça UMA pergunta de aprofundamento (cor? clima? estilo?)
 
-NUNCA prometa replicar o que o cliente mandou. Use a palavra "inspiração", não "fazer igual".`
+NUNCA prometa replicar o que o cliente mandou. Use "inspiração", não "fazer igual".`
     : "";
 
   const weekendRule = `\n━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
 📅 REGRA DE FIM DE SEMANA
 ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
-SE hoje for SEXTA, SÁBADO ou DOMINGO E o cliente pedir EXPLICITAMENTE para falar com o Jean (não com você): adicione uma observação tipo:
-"sex/sáb/dom o Jean costuma estar conduzindo eventos, então o retorno dele pode levar um pouco mais — mas vou avisar ele agora mesmo, fica tranquilo(a)!"
-
-Em qualquer outro caso (dia útil OU cliente não pediu falar com Jean), siga normal sem mencionar essa regra.`;
+SE hoje for SEXTA, SÁBADO ou DOMINGO E o cliente pedir EXPLICITAMENTE para falar com o Jean:
+adicione observação tipo "sex/sáb/dom o Jean costuma estar conduzindo eventos, então o retorno pode levar um pouco mais — mas vou avisar ele agora!"
+Em qualquer outro caso, siga normal sem mencionar.`;
 
   const followupBlock =
     mode === "followup"
       ? `\n━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
 🔁 MODO FOLLOW-UP — REENGAJAMENTO
 ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
-ATENÇÃO: você está reativando este cliente que parou de responder. Não houve mensagem dele há 3+ dias.
-
-Tarefa:
-- Releia o DOSSIÊ pra entender em qual etapa parou (info coletada? sem data? quase fechando?)
-- Envie 1-2 mensagens curtas (NÃO 3, é só um cutucão)
-- Tom: gentil, leve, sem pressionar — não soa cobrança
-- SEMPRE cite especificidade do que estavam falando ("seu casamento em setembro", "a festa do Lucas", etc)
-- Termine com 1 pergunta aberta tipo "como posso te ajudar a seguir?"
-
-Exemplo:
-"Oi João, tudo bem? 💫||Lembrei de você aqui — tava conversando sobre o casamento de setembro. Se quiser dar o próximo passo ou se tiver alguma dúvida, é só me chamar ✨"
-
-NUNCA mande 3 follow-ups idênticos. Varie a forma a cada vez.`
+Releia o DOSSIÊ pra entender em qual etapa parou. Envie 1-2 mensagens curtas, gentis, com especificidade do que estavam falando. Termine com pergunta aberta.`
       : "";
 
-  // Extrai a ÚLTIMA msg do cliente pra destacar explicitamente
   const lastUserMsg = [...history].reverse().find((m) => m.role === "user")?.content || "";
 
-  const systemPrompt = `Você é Marina, atendente virtual do Jean Izidoro (arquiteto de eventos especialista em Decoração de Casamentos, Assessoria Cerimonial de Eventos e Decoração de Festas Infantis).
+  const systemInstruction = `Você é Marina, atendente virtual do Jean Izidoro (arquiteto de eventos especialista em Decoração de Casamentos, Assessoria Cerimonial de Eventos e Decoração de Festas Infantis).
 
 SUA MISSÃO: responder o cliente com naturalidade, qualificar o lead coletando info do evento, e sugerir reunião com Jean quando fizer sentido. Você NÃO é o Jean — é a atendente dele.
 
 ═══ REGRA DE OURO ═══
-RESPONDA SEMPRE A ÚLTIMA PERGUNTA/FALA DO CLIENTE. Nunca ignore o que ele perguntou pra mudar de assunto. Se não souber a resposta, diga honestamente "isso o Jean responde melhor pessoalmente" — mas JAMAIS desvie a conversa sem responder.
+RESPONDA SEMPRE A ÚLTIMA PERGUNTA/FALA DO CLIENTE. Nunca ignore o que ele perguntou pra mudar de assunto. Se não souber a resposta, diga honestamente "isso o Jean responde melhor pessoalmente".
 
 ═══ COMO RESPONDER ═══
-• Quebre em 1-3 mensagens curtas, separadas por "||" (pipe duplo)
+• Quebre em 1-3 mensagens curtas, separadas por "||" no campo "reply"
 • Máximo 2 linhas por mensagem
 • Tom: ${toneInstruction}
 • Máximo 1 emoji por mensagem
 • Varie aberturas — não comece sempre igual
 
 ═══ O QUE VOCÊ NUNCA FAZ ═══
-• Nunca confirma data (só o Jean reserva)
+• Nunca confirma data sem checar AGENDA (ver REGRA DE FERRO abaixo)
 • Nunca passa valor (o Jean apresenta proposta)
 • Nunca inventa portfólio/projetos antigos
 • Nunca se passa pelo Jean
-• Nunca se despede se cliente não se despediu (ex: "oi" NÃO é despedida)
-• Nunca promete serviço fora do escopo (decoração de casamentos, assessoria cerimonial de eventos, decoração de festas infantis)
+• Nunca se despede se cliente não se despediu
+• Nunca promete serviço fora do escopo
 
 ═══ PERSONA ═══
 ${persona}
 
 ═══ NEGÓCIO ═══
 ${businessContext}
+${dossierBlock}${calendarBlock}${dateIronRule}${dateVerifyBlock}${meetingSlotsBlock}${memoryBlock}${timeContext}${humanTakeoverContext}${firstInteractionNote}${inspirationNote}${weekendRule}${followupBlock}
 
-${dossierBlock}
-${calendarBlock}
-${timeContext}
-${humanTakeoverContext}
-${firstInteractionNote}
-${inspirationNote}
-${weekendRule}
-${followupBlock}
-
-═══ FORMATO DA RESPOSTA ═══
-Texto puro, em português. Separe mensagens por "||". Sem markdown. Sem explicações.
-
-═══ FOCO AGORA ═══
-A ÚLTIMA MENSAGEM DO CLIENTE É: "${lastUserMsg}"
-
-Sua próxima resposta TEM QUE responder essa mensagem específica. Leia o DOSSIÊ acima pra ter os dados. Responda agora.`;
-
-  const res = await retry(
-    () =>
-      withTimeout(
-        anthropic.messages.create({
-          model: SONNET,
-          max_tokens: 500,
-          temperature: 0.8,
-          system: systemPrompt,
-          messages: history,
-        }),
-        CLAUDE_TIMEOUT_MS,
-        "claude:reply"
-      ),
-    { retries: 2, baseDelayMs: 1500, label: "claude:reply" }
-  );
-
-  const txt = res.content[0].type === "text" ? res.content[0].text : "";
-  const parts = txt
-    .split("||")
-    .map((s) => s.trim())
-    .filter((s) => s.length > 0)
-    .slice(0, 3);
-
-  return parts.length > 0 ? parts : [txt.trim()];
+═══ FORMATO DA RESPOSTA (JSON OBRIGATÓRIO) ═══
+Retorne JSON estrito:
+{
+  "reply": "msg1||msg2||msg3",
+  "meetingProposed": { "date": "YYYY-MM-DD", "time": "HH:mm" } OU null
 }
 
-/**
- * Atualiza seções dinâmicas do dossiê baseado nas últimas trocas.
- * Rodado em background pelo Haiku (barato, rápido).
- * Mantém: recentInteractions + clientAlreadyAsked + sofiaAlreadyExplained + nextBestAction
- */
+"meetingProposed" só preenche se o cliente CONFIRMOU explicitamente um horário de reunião (de uma das opções dos HORÁRIOS DISPONÍVEIS). Em qualquer outra resposta, deixe null.
+
+═══ FOCO AGORA ═══
+A ÚLTIMA MENSAGEM DO CLIENTE É: "${lastUserMsg}"`;
+
+  try {
+    const txt = await geminiText({
+      model: FLASH,
+      systemInstruction,
+      contents: toGeminiContents(history),
+      temperature: 0.8,
+      maxOutputTokens: 700,
+      responseMimeType: "application/json",
+      label: "gemini:reply",
+    });
+    const cleaned = txt.replace(/```json\n?/g, "").replace(/```/g, "").trim();
+    const parsed = JSON.parse(cleaned) as { reply?: string; meetingProposed?: MeetingProposal | null };
+    const replyTxt = parsed.reply || "";
+    const chunks = replyTxt
+      .split("||")
+      .map((s) => s.trim())
+      .filter((s) => s.length > 0)
+      .slice(0, 3);
+    const meetingProposed =
+      parsed.meetingProposed && parsed.meetingProposed.date && parsed.meetingProposed.time
+        ? parsed.meetingProposed
+        : null;
+    return {
+      chunks: chunks.length > 0 ? chunks : [replyTxt.trim()].filter(Boolean),
+      meetingProposed,
+    };
+  } catch (e) {
+    console.error("[gemini:reply] parse error", e);
+    throw e;
+  }
+}
+
 export async function updateRecentInteractions(
   lastTurns: { role: "user" | "assistant"; content: string }[],
   existing: ContactProfile | null
@@ -345,36 +380,34 @@ export async function updateRecentInteractions(
     .join("\n");
 
   try {
-    const res = await anthropic.messages.create({
-      model: HAIKU,
-      max_tokens: 500,
-      system: `Você resume e estrutura uma conversa entre cliente e atendente virtual (Marina).
-Retorne JSON estrito:
+    const txt = await geminiText({
+      model: FLASH_LITE,
+      systemInstruction: `Você resume conversa entre cliente e Marina. Retorne JSON estrito:
 {
-  "recentInteractions": ["bullet 1 do que aconteceu", "bullet 2", ...] (máx 5, curto),
-  "clientAlreadyAsked": ["perguntas que o cliente já fez"] (máx 5),
-  "sofiaAlreadyExplained": ["coisas que Marina já explicou pro cliente"] (máx 5),
-  "nextBestAction": "o que Marina deve fazer na próxima msg (1 frase)"
+  "recentInteractions": ["bullet 1", "bullet 2", ...] (máx 5),
+  "clientAlreadyAsked": ["perguntas que cliente fez"] (máx 5),
+  "sofiaAlreadyExplained": ["coisas que Marina já explicou"] (máx 5),
+  "nextBestAction": "1 frase do que Marina deve fazer próximo"
 }
-
-Seja conciso. Mantenha info estável entre chamadas (não invente). JSON apenas, sem markdown.`,
-      messages: [
+Conciso, mantenha info estável. JSON apenas.`,
+      contents: [
         {
           role: "user",
-          content: `Contexto prévio: ${JSON.stringify({
-            recentInteractions: existing?.recentInteractions || [],
-            clientAlreadyAsked: existing?.clientAlreadyAsked || [],
-            sofiaAlreadyExplained: existing?.sofiaAlreadyExplained || [],
-          })}
-
-Últimas trocas:
-${dialog}
-
-Atualize o resumo com o que é novo.`,
+          parts: [
+            {
+              text: `Contexto prévio: ${JSON.stringify({
+                recentInteractions: existing?.recentInteractions || [],
+                clientAlreadyAsked: existing?.clientAlreadyAsked || [],
+                sofiaAlreadyExplained: existing?.sofiaAlreadyExplained || [],
+              })}\n\nÚltimas trocas:\n${dialog}\n\nAtualize o resumo com o que é novo.`,
+            },
+          ],
         },
       ],
+      maxOutputTokens: 500,
+      responseMimeType: "application/json",
+      label: "gemini:interactions",
     });
-    const txt = res.content[0].type === "text" ? res.content[0].text : "{}";
     const cleaned = txt.replace(/```json\n?/g, "").replace(/```/g, "").trim();
     const parsed = JSON.parse(cleaned);
     return {
@@ -403,37 +436,31 @@ export async function extractProfileLearnings(
   if (!lastUser.trim()) return null;
 
   try {
-    const res = await anthropic.messages.create({
-      model: HAIKU,
-      max_tokens: 300,
-      system: [
-        {
-          type: "text",
-          text: `Você extrai aprendizados sobre um cliente a partir de mensagens dele.
-Retorne JSON estrito:
+    const txt = await geminiText({
+      model: FLASH_LITE,
+      systemInstruction: `Você extrai aprendizados sobre um cliente. Retorne JSON estrito:
 {
   "preferredName": "nome/apelido se mencionado",
-  "interests": ["coisas que o cliente demonstrou interesse"],
-  "pastEvents": ["eventos passados que o cliente mencionou ter participado"],
-  "notesFromAi": ["observações úteis (ex: 'mãe de noiva', 'prefere contato noturno', 'muito detalhista')"],
-  "lastTopics": ["tópicos falados nesta conversa"]
+  "interests": ["interesses"],
+  "pastEvents": ["eventos passados que cliente mencionou"],
+  "notesFromAi": ["observações úteis"],
+  "lastTopics": ["tópicos desta conversa"]
 }
-Se não houver informação nova, retorne campo vazio. JSON apenas, sem markdown.`,
-        },
-      ],
-      messages: [
+Se não houver info nova, retorne campo vazio. JSON apenas.`,
+      contents: [
         {
           role: "user",
-          content: `Perfil atual: ${JSON.stringify(existing || {})}
-
-Mensagens recentes do cliente:
-${lastUser}
-
-Extraia novos aprendizados (apenas o que for novo e útil).`,
+          parts: [
+            {
+              text: `Perfil atual: ${JSON.stringify(existing || {})}\n\nMensagens recentes:\n${lastUser}\n\nExtraia novos aprendizados.`,
+            },
+          ],
         },
       ],
+      maxOutputTokens: 300,
+      responseMimeType: "application/json",
+      label: "gemini:learnings",
     });
-    const txt = res.content[0].type === "text" ? res.content[0].text : "{}";
     const cleaned = txt.replace(/```json\n?/g, "").replace(/```/g, "").trim();
     const parsed = JSON.parse(cleaned);
     return {
@@ -455,23 +482,32 @@ export async function generateDailySummary(data: {
   hotLeads: number;
   leadsList: { name: string; eventType: string; date: string; temperature: string }[];
 }) {
-  const res = await anthropic.messages.create({
-    model: HAIKU,
-    max_tokens: 500,
-    messages: [
-      {
-        role: "user",
-        content: `Gere um resumo executivo curto (máximo 5 linhas) do dia para Jean Izidoro:
+  try {
+    const txt = await geminiText({
+      model: FLASH_LITE,
+      systemInstruction: "Você gera resumos executivos curtos pra Jean Izidoro.",
+      contents: [
+        {
+          role: "user",
+          parts: [
+            {
+              text: `Gere resumo executivo curto (máx 5 linhas):
 - ${data.totalMsgs} mensagens recebidas
 - ${data.newLeads} novos leads
 - ${data.hotLeads} leads quentes
 Lista de leads:
 ${data.leadsList.map((l) => `- ${l.name} (${l.temperature}): ${l.eventType} em ${l.date}`).join("\n")}
 
-Use tom profissional, destaque oportunidades urgentes.`,
-      },
-    ],
-  });
-  const txt = res.content[0].type === "text" ? res.content[0].text : "";
-  return txt.trim();
+Tom profissional, destaque oportunidades urgentes.`,
+            },
+          ],
+        },
+      ],
+      maxOutputTokens: 500,
+      label: "gemini:summary",
+    });
+    return txt.trim();
+  } catch {
+    return "";
+  }
 }
