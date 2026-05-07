@@ -7,7 +7,9 @@ const GEMINI_TIMEOUT_MS = 25000;
 const FLASH = "gemini-2.5-flash";
 const FLASH_LITE = "gemini-2.5-flash-lite";
 
-const ai = new GoogleGenAI({ apiKey: process.env.GOOGLE_AI_API_KEY || "" });
+const ai = new GoogleGenAI({
+  apiKey: process.env.GEMINI_API_KEY || process.env.GOOGLE_AI_API_KEY || "",
+});
 
 // converte histórico { user|assistant } pra formato Gemini { user|model }
 function toGeminiContents(history: { role: "user" | "assistant"; content: string }[]) {
