@@ -352,17 +352,19 @@ Em qualquer dúvida → "vou confirmar com o Jean".`;
 
   const dateVerifyBlock = dateVerification
     ? `\n━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
-🔍 DATA(S) MENCIONADA(S) NA MSG DO CLIENTE — STATUS NA AGENDA DO JEAN
+🔍 DATA(S) MENCIONADA(S) — STATUS REAL NA AGENDA DO JEAN
 ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
 ${dateVerification}
 
-⚠️ ATENÇÃO — ESSA INFO SÓ É RELEVANTE SE O CLIENTE ESTÁ PEDINDO REUNIÃO PRESENCIAL:
-- Se cliente está marcando REUNIÃO com o Jean → use o status acima pra confirmar/rejeitar
-- Se cliente está dizendo a DATA DO EVENTO DELE (casamento, festa, etc) → NÃO REJEITE.
-  A data do evento dele é decisão dele. Apenas REGISTRE pra Jean ver depois.
-  Mesmo que apareça "OCUPADO", isso é evento de outro cliente — Jean decide se topa, não você.
-  Ex: cliente diz "casamento 25/06" → você NÃO diz "Jean tem compromisso, escolha outra". Você diz "anotei!" e segue qualificando.
-`
+⚠️ JEAN É O ARQUITETO QUE EXECUTA O EVENTO PESSOALMENTE — ele só consegue conduzir UM evento por data.
+Se a data acima estiver ❌ OCUPADO, isso significa que ele já tem compromisso e NÃO consegue pegar outro casamento/festa nessa mesma data.
+
+Como agir:
+• Se data está ❌ OCUPADO → avise o cliente com delicadeza: "essa data o Jean já tem outro evento agendado, ele não consegue conduzir dois no mesmo dia. Você tem flexibilidade pra outra data próxima?"
+• Se data está ⚠️ PARCIAL → "essa data o Jean tem outro compromisso parcial, mas dependendo do horário do seu evento ele pode encaixar. Vou alinhar com ele e te confirmo."
+• Se data está ✅ DISPONÍVEL ou não aparece no bloco → siga normal, registre.
+
+NUNCA confirme data como reservada — só o Jean reserva. Você apenas informa o status atual.`
     : "";
 
   const meetingSlotsBlock = meetingSlotsContext
