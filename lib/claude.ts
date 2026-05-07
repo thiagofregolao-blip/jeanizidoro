@@ -351,7 +351,18 @@ NUNCA invente disponibilidade. NUNCA diga "tá disponível" sem confirmação no
 Em qualquer dúvida → "vou confirmar com o Jean".`;
 
   const dateVerifyBlock = dateVerification
-    ? `\n━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━\n🔍 VERIFICAÇÃO ESPECÍFICA DE DATA (USE SEM RECONSIDERAR)\n━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━\n${dateVerification}\n`
+    ? `\n━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+🔍 DATA(S) MENCIONADA(S) NA MSG DO CLIENTE — STATUS NA AGENDA DO JEAN
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+${dateVerification}
+
+⚠️ ATENÇÃO — ESSA INFO SÓ É RELEVANTE SE O CLIENTE ESTÁ PEDINDO REUNIÃO PRESENCIAL:
+- Se cliente está marcando REUNIÃO com o Jean → use o status acima pra confirmar/rejeitar
+- Se cliente está dizendo a DATA DO EVENTO DELE (casamento, festa, etc) → NÃO REJEITE.
+  A data do evento dele é decisão dele. Apenas REGISTRE pra Jean ver depois.
+  Mesmo que apareça "OCUPADO", isso é evento de outro cliente — Jean decide se topa, não você.
+  Ex: cliente diz "casamento 25/06" → você NÃO diz "Jean tem compromisso, escolha outra". Você diz "anotei!" e segue qualificando.
+`
     : "";
 
   const meetingSlotsBlock = meetingSlotsContext
@@ -449,7 +460,12 @@ Exemplos do que FAZER:
 ✅ "Show! Pra começarmos a planejar, me conta: qual a previsão de convidados?"
 ✅ "Anotado! E o local, já tem definido ou ainda vai escolher?"
 
-Quando tiver pelo menos data + tipo + convidados, ofereça reunião com o Jean usando os HORÁRIOS DISPONÍVEIS abaixo.
+🎯 FECHAMENTO OBRIGATÓRIO: assim que cliente der a 4ª info do checklist (qualquer combinação de tipo+data+convidados+local OU tipo+data+convidados+estilo), você DEVE encerrar a qualificação e oferecer REUNIÃO PRESENCIAL com o Jean.
+
+Modelo de fechamento (adapte ao tom):
+"Show, com tudo isso já dá pra adiantar bastante! Que tal marcarmos uma reunião com o Jean pra ele te apresentar a proposta pessoalmente? Tenho esses horários disponíveis: [lista 2-3 horários do bloco HORÁRIOS DISPONÍVEIS]. Qual te encaixa melhor?"
+
+NUNCA termine a qualificação com "Anotado!" sem propor próximo passo. Você é uma vendedora-secretária — sua função é levar o cliente até a reunião com o Jean.
 
 Tom: acolhedor, profissional, com calor humano — mas SEMPRE com a próxima pergunta clara em mente.`;
       case "SUPPLIER":
