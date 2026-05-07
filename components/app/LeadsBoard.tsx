@@ -211,6 +211,25 @@ export default function LeadsBoard() {
     }
   }
 
+  async function resetContact(contactId: string, label: string) {
+    if (
+      !confirm(
+        `RESETAR contato ${label}?\n\n⚠️ APAGA todas as mensagens, leads, dossiê e categoria.\nNa próxima mensagem, Marina vai tratar como contato NOVO. Não dá pra desfazer.`
+      )
+    )
+      return;
+    setResettingId(contactId);
+    try {
+      const res = await fetch(`/api/contacts/${contactId}/reset`, { method: "POST" });
+      if (!res.ok) throw new Error("falhou");
+      await refresh();
+    } catch {
+      alert("Erro ao resetar.");
+    } finally {
+      setResettingId(null);
+    }
+  }
+
   async function finishLead(l: Lead) {
     if (!confirm(`Finalizar atendimento de ${l.contact.name || formatPhone(l.contact.phone)}?`)) return;
     setFinishingId(l.id);
@@ -568,14 +587,24 @@ export default function LeadsBoard() {
                         {waitingLabel}
                       </span>
                     )}
-                    <a
-                      href={waUrl}
-                      target="_blank"
-                      rel="noopener"
-                      className="text-[10px] uppercase tracking-widest border border-green-500/40 text-green-400 hover:bg-green-500/10 px-3 py-1 transition-colors"
-                    >
-                      WhatsApp
-                    </a>
+                    <div className="flex gap-1">
+                      <a
+                        href={waUrl}
+                        target="_blank"
+                        rel="noopener"
+                        className="text-[10px] uppercase tracking-widest border border-green-500/40 text-green-400 hover:bg-green-500/10 px-3 py-1 transition-colors"
+                      >
+                        WhatsApp
+                      </a>
+                      <button
+                        onClick={() => resetContact(c.contactId, c.name || formatPhone(c.phone))}
+                        disabled={resettingId === c.contactId}
+                        title="Resetar contato (apaga tudo, vira novo)"
+                        className="text-[10px] uppercase tracking-widest border border-red-500/30 text-red-400/80 hover:bg-red-500/10 hover:border-red-500/60 px-2 py-1 transition-colors disabled:opacity-50"
+                      >
+                        {resettingId === c.contactId ? "..." : "🔄"}
+                      </button>
+                    </div>
                   </div>
                 </div>
                 {c.lastMsg && (
