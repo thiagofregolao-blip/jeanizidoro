@@ -53,6 +53,7 @@ enum ContactCategory {
   TEAM        // equipe/funcionário
   FAMILY      // família/amigos pessoais
   PARTNER     // parceiros/imprensa/colegas profissionais
+  WORKS       // obras e execução (pedreiro, eletricista, encanador, mestre de obras)
   OTHER       // spam, propaganda, mensagens fora de contexto
 }
 

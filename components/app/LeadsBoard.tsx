@@ -3,7 +3,7 @@
 import { useCallback, useEffect, useMemo, useState } from "react";
 import AttendModal from "./AttendModal";
 
-type ContactCategory = "UNKNOWN" | "CLIENT" | "SUPPLIER" | "TEAM" | "FAMILY" | "PARTNER" | "OTHER";
+type ContactCategory = "UNKNOWN" | "CLIENT" | "SUPPLIER" | "TEAM" | "FAMILY" | "PARTNER" | "WORKS" | "OTHER";
 
 type Lead = {
   id: string;
@@ -70,7 +70,7 @@ function getPhaseLabel(l: Lead): string {
   return "Novo";
 }
 
-type MainTab = "EVENTS" | "SUPPLIER" | "FAMILY" | "PARTNER" | "TEAM" | "OTHER";
+type MainTab = "EVENTS" | "SUPPLIER" | "FAMILY" | "PARTNER" | "TEAM" | "WORKS" | "OTHER";
 type EventSubTab = "HOT" | "WARM" | "COLD" | "IN_SERVICE" | "WON" | "FINISHED";
 
 const MAIN_TABS: {
@@ -85,6 +85,7 @@ const MAIN_TABS: {
   { key: "FAMILY", label: "Família", emoji: "👨‍👩‍👧", accent: "text-pink-400 border-pink-500/50", dropCategory: "FAMILY" },
   { key: "PARTNER", label: "Parcerias", emoji: "🤝", accent: "text-purple-400 border-purple-500/50", dropCategory: "PARTNER" },
   { key: "TEAM", label: "Equipe", emoji: "🧑‍💼", accent: "text-cyan-400 border-cyan-500/50", dropCategory: "TEAM" },
+  { key: "WORKS", label: "Obras e Execução", emoji: "🔨", accent: "text-orange-400 border-orange-500/50", dropCategory: "WORKS" },
   { key: "OTHER", label: "Outros", emoji: "📩", accent: "text-fg-muted border-line", dropCategory: "OTHER" },
 ];
 
@@ -162,6 +163,7 @@ export default function LeadsBoard() {
     FAMILY: 0,
     PARTNER: 0,
     TEAM: 0,
+    WORKS: 0,
     OTHER: 0,
   });
 
@@ -177,7 +179,7 @@ export default function LeadsBoard() {
         ]);
         const newCounts: Record<MainTab, number> = {
           EVENTS: (leadsRes.leads || []).filter((l: Lead) => l.status !== "FINISHED" && l.status !== "WON" && l.status !== "LOST").length,
-          SUPPLIER: 0, FAMILY: 0, PARTNER: 0, TEAM: 0, OTHER: 0,
+          SUPPLIER: 0, FAMILY: 0, PARTNER: 0, TEAM: 0, WORKS: 0, OTHER: 0,
         };
         const cats = MAIN_TABS.filter((t) => t.key !== "EVENTS");
         cats.forEach((t, i) => {

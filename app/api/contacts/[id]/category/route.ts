@@ -5,7 +5,7 @@ import { requireSession } from "@/lib/auth";
 
 export const runtime = "nodejs";
 
-const VALID: ContactCategory[] = ["UNKNOWN", "CLIENT", "SUPPLIER", "TEAM", "FAMILY", "PARTNER", "OTHER"];
+const VALID: ContactCategory[] = ["UNKNOWN", "CLIENT", "SUPPLIER", "TEAM", "FAMILY", "PARTNER", "WORKS", "OTHER"];
 
 /**
  * Reclassifica manualmente um contato.

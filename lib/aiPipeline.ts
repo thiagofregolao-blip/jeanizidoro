@@ -395,7 +395,7 @@ export async function processInboundMessage(args: {
   // Marina vai responder NATURALMENTE em qualquer caso — a categoria é só pra
   // (a) atualizar a aba do painel e (b) dar contexto pro tom da resposta.
   // Categoria locked pelo Jean nunca é sobrescrita pela Marina.
-  let detectedIntent: { category: "CLIENT" | "SUPPLIER" | "TEAM" | "FAMILY" | "PARTNER" | "OTHER"; reason: string } | null = null;
+  let detectedIntent: { category: "CLIENT" | "SUPPLIER" | "TEAM" | "FAMILY" | "PARTNER" | "WORKS" | "OTHER"; reason: string } | null = null;
   if (!isFirstInteraction && !contact.categoryLockedByJean) {
     const recentTexts = formatted.slice(-5).map((m) => `${m.role === "user" ? "Cliente" : "Marina"}: ${m.content}`);
     const intent = await classifyIntent({
@@ -438,6 +438,7 @@ export async function processInboundMessage(args: {
         TEAM: "equipe/funcionário",
         FAMILY: "família/amigo",
         PARTNER: "parceiro/imprensa",
+        WORKS: "obras/execução",
         OTHER: "não-classificada",
       };
       alertOwner(
@@ -492,8 +493,8 @@ export async function processInboundMessage(args: {
       dateVerification,
       meetingSlotsContext,
       hasActiveClient: !!activeLead,
-      contactCategory: (detectedIntent?.category as "CLIENT" | "SUPPLIER" | "TEAM" | "FAMILY" | "PARTNER" | "OTHER" | undefined)
-        || (contact.category as "UNKNOWN" | "CLIENT" | "SUPPLIER" | "TEAM" | "FAMILY" | "PARTNER" | "OTHER")
+      contactCategory: (detectedIntent?.category as "CLIENT" | "SUPPLIER" | "TEAM" | "FAMILY" | "PARTNER" | "WORKS" | "OTHER" | undefined)
+        || (contact.category as "UNKNOWN" | "CLIENT" | "SUPPLIER" | "TEAM" | "FAMILY" | "PARTNER" | "WORKS" | "OTHER")
         || "UNKNOWN",
       contactCategoryReason: detectedIntent?.reason || contact.categoryReason || null,
       humanTakeoverContext: resumeAfterHumanContext,

@@ -84,7 +84,7 @@ export type MeetingProposal = {
   time: string;   // "HH:mm"
 };
 
-export type IntentCategory = "CLIENT" | "SUPPLIER" | "TEAM" | "FAMILY" | "PARTNER" | "OTHER";
+export type IntentCategory = "CLIENT" | "SUPPLIER" | "TEAM" | "FAMILY" | "PARTNER" | "WORKS" | "OTHER";
 
 export type IntentResult = {
   category: IntentCategory;
@@ -147,6 +147,15 @@ Categorias e EXEMPLOS:
   - "fulano me indicou seu contato pra parceria"
   - "queria fazer uma colab"
 
+• WORKS: pessoal de obra/execução em andamento (pedreiro, mestre de obras, eletricista, encanador, gesseiro, marceneiro, pintor, serralheiro). Sinais:
+  - "tô na obra", "subindo a parede", "concretagem amanhã"
+  - "preciso de mais cimento/areia/tijolo"
+  - "o forro tá pronto", "vou desligar a água um pouco"
+  - "manda a planta pra mim ver a medida"
+  - "tem que furar aqui ou aqui?"
+  - "o pedreiro pediu mais X", "o serralheiro tá aqui"
+  - tom técnico/operacional de canteiro de obra
+
 • OTHER: vendedor, propaganda, mass-broadcast, spam, mensagem fora de contexto. Sinais:
   - oferta genérica de produto que não tem nada a ver
   - "🌸✨ PROMOÇÃO DIA DAS MÃES" (broadcast comercial)
@@ -161,7 +170,7 @@ REGRAS:
 
 Retorne JSON estrito:
 {
-  "category": "CLIENT" | "SUPPLIER" | "TEAM" | "FAMILY" | "PARTNER" | "OTHER",
+  "category": "CLIENT" | "SUPPLIER" | "TEAM" | "FAMILY" | "PARTNER" | "WORKS" | "OTHER",
   "confidence": "high" | "low",
   "reason": "1 frase curta explicando"
 }`,
@@ -287,7 +296,7 @@ type GenerateReplyInput = {
   hasInspiration?: boolean;
   mode?: "normal" | "followup";
   hasActiveClient?: boolean;
-  contactCategory?: "UNKNOWN" | "CLIENT" | "SUPPLIER" | "TEAM" | "FAMILY" | "PARTNER" | "OTHER";
+  contactCategory?: "UNKNOWN" | "CLIENT" | "SUPPLIER" | "TEAM" | "FAMILY" | "PARTNER" | "WORKS" | "OTHER";
   contactCategoryReason?: string | null;
 };
 
@@ -420,11 +429,29 @@ Releia o DOSSIÊ pra entender em qual etapa parou. Envie 1-2 mensagens curtas, g
   const categoryGuide = (() => {
     switch (contactCategory) {
       case "CLIENT":
-        return `🎯 ESTE CONTATO É CLIENTE (potencial ou ativo) — atenda normal:
-• Pode qualificar (perguntar tipo de evento, data, convidados, local) quando fizer sentido
-• Sugerir reunião usando os HORÁRIOS DISPONÍVEIS quando o cliente já demonstrou interesse claro
-• Tom acolhedor, profissional, com calor humano
-• Se for cliente em atendimento ativo, foque em avançar o que já estava combinado`;
+        return `🎯 ESTE CONTATO É CLIENTE (potencial ou ativo) — sua MISSÃO é AVANÇAR a venda:
+
+📋 CHECKLIST DE QUALIFICAÇÃO (colete progressivamente, 1 info por turno):
+1. Tipo de evento (casamento, 15 anos, infantil, corporativo, etc)
+2. Data prevista (mesmo aproximada — "começo de outubro" serve)
+3. Número aproximado de convidados
+4. Local (cidade, salão, espaço)
+5. Estilo/inspiração (rústico, clean, boho, etc)
+
+REGRA: a CADA mensagem que cliente confirmar interesse, faça AVANÇAR a conversa puxando UMA informação que ainda falta do checklist. Sem empilhar várias perguntas.
+
+Exemplos do que NÃO fazer:
+❌ "Que maravilha! Jean adora!" (só animação, sem perguntar nada)
+❌ "Show! Qual a data? Quantos convidados? Onde vai ser?" (3 perguntas de uma vez)
+
+Exemplos do que FAZER:
+✅ "Que ótimo! Pra eu te ajudar a alinhar tudo direitinho — você já tem uma data em mente?"
+✅ "Show! Pra começarmos a planejar, me conta: qual a previsão de convidados?"
+✅ "Anotado! E o local, já tem definido ou ainda vai escolher?"
+
+Quando tiver pelo menos data + tipo + convidados, ofereça reunião com o Jean usando os HORÁRIOS DISPONÍVEIS abaixo.
+
+Tom: acolhedor, profissional, com calor humano — mas SEMPRE com a próxima pergunta clara em mente.`;
       case "SUPPLIER":
         return `📦 ESTE CONTATO É FORNECEDOR — você confirma que recebeu e diz que vai passar pro Jean:
 • NUNCA confirme preço, prazo, pedido, especificação técnica — isso é só com o Jean
@@ -445,6 +472,12 @@ Releia o DOSSIÊ pra entender em qual etapa parou. Envie 1-2 mensagens curtas, g
         return `🤝 ESTE CONTATO É PARCEIRO/IMPRENSA — atende com profissionalismo:
 • Tom cordial, profissional
 • Confirma e diz que vai repassar pro Jean responder pessoalmente`;
+      case "WORKS":
+        return `🔨 ESTE CONTATO É DA OBRA/EXECUÇÃO (pedreiro, mestre, eletricista, etc):
+• Tom direto, prático, de canteiro de obra
+• NUNCA tome decisão técnica (medidas, materiais, prazo) — isso é com o Jean
+• Confirma que recebeu e que vai passar pro Jean
+• Ex: "Beleza, vou avisar o Jean já já." / "Anotado, ele te liga."`;
       case "OTHER":
         return `📩 ESTE CONTATO É CATEGORIA "OUTROS" (provavelmente não é cliente):
 • Tom profissional e neutro

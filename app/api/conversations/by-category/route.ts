@@ -5,7 +5,7 @@ import { requireSession } from "@/lib/auth";
 
 export const runtime = "nodejs";
 
-const VALID: ContactCategory[] = ["UNKNOWN", "SUPPLIER", "TEAM", "FAMILY", "PARTNER", "OTHER"];
+const VALID: ContactCategory[] = ["UNKNOWN", "SUPPLIER", "TEAM", "FAMILY", "PARTNER", "WORKS", "OTHER"];
 
 /**
  * Lista conversas agrupadas por categoria — usado pras abas não-evento do painel.
