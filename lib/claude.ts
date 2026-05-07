@@ -446,36 +446,55 @@ Retorne JSON estrito:
 ═══ FOCO AGORA ═══
 A ÚLTIMA MENSAGEM DO CLIENTE É: "${lastUserMsg}"`;
 
+  const txt = await geminiText({
+    model: FLASH,
+    systemInstruction,
+    contents: toGeminiContents(history),
+    temperature: 0.8,
+    maxOutputTokens: 700,
+    responseMimeType: "application/json",
+    label: "gemini:reply",
+  });
+  const cleaned = txt.replace(/```json\n?/g, "").replace(/```/g, "").trim();
+
+  let replyTxt = "";
+  let meetingProposed: MeetingProposal | null = null;
+
   try {
-    const txt = await geminiText({
-      model: FLASH,
-      systemInstruction,
-      contents: toGeminiContents(history),
-      temperature: 0.8,
-      maxOutputTokens: 700,
-      responseMimeType: "application/json",
-      label: "gemini:reply",
-    });
-    const cleaned = txt.replace(/```json\n?/g, "").replace(/```/g, "").trim();
     const parsed = JSON.parse(cleaned) as { reply?: string; meetingProposed?: MeetingProposal | null };
-    const replyTxt = parsed.reply || "";
-    const chunks = replyTxt
-      .split("||")
-      .map((s) => s.trim())
-      .filter((s) => s.length > 0)
-      .slice(0, 2);
-    const meetingProposed =
+    replyTxt = parsed.reply || "";
+    meetingProposed =
       parsed.meetingProposed && parsed.meetingProposed.date && parsed.meetingProposed.time
         ? parsed.meetingProposed
         : null;
-    return {
-      chunks: chunks.length > 0 ? chunks : [replyTxt.trim()].filter(Boolean),
-      meetingProposed,
-    };
-  } catch (e) {
-    console.error("[gemini:reply] parse error", e);
-    throw e;
+  } catch {
+    // JSON malformado — extrai reply via regex como fallback
+    console.warn("[gemini:reply] JSON inválido, fazendo extração resiliente");
+    // Tenta capturar o conteúdo do campo "reply": "..." mesmo com aspas/quebras dentro
+    const replyMatch = cleaned.match(/"reply"\s*:\s*"([\s\S]*?)"\s*(?:,|}|\n)/);
+    if (replyMatch) {
+      replyTxt = replyMatch[1].replace(/\\n/g, "\n").replace(/\\"/g, '"');
+    } else {
+      // Sem nem match — usa o texto bruto (limpo de chaves/aspas)
+      replyTxt = cleaned.replace(/^[{[]/, "").replace(/[}\]]$/, "").trim();
+    }
+    // tenta capturar meetingProposed também
+    const meetMatch = cleaned.match(/"meetingProposed"\s*:\s*\{\s*"date"\s*:\s*"([^"]+)"\s*,\s*"time"\s*:\s*"([^"]+)"/);
+    if (meetMatch) {
+      meetingProposed = { date: meetMatch[1], time: meetMatch[2] };
+    }
   }
+
+  const chunks = replyTxt
+    .split("||")
+    .map((s) => s.trim())
+    .filter((s) => s.length > 0)
+    .slice(0, 2);
+
+  return {
+    chunks: chunks.length > 0 ? chunks : [replyTxt.trim()].filter(Boolean),
+    meetingProposed,
+  };
 }
 
 export async function updateRecentInteractions(
