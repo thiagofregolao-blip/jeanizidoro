@@ -110,27 +110,61 @@ export async function classifyIntent(args: {
   try {
     const txt = await geminiText({
       model: FLASH_LITE,
-      systemInstruction: `Você classifica mensagens recebidas no WhatsApp do Jean Izidoro (arquiteto e produtor de eventos).
+      systemInstruction: `Você classifica mensagens recebidas no WhatsApp do Jean Izidoro (arquiteto formado, atua em eventos — casamento/cerimonial/festa infantil — e projetos de arquitetura).
 
-Jean recebe mensagens de TODO TIPO de pessoa. Sua tarefa é categorizar quem está mandando.
+Categorias e EXEMPLOS:
 
-Categorias:
-• CLIENT: cliente em potencial perguntando sobre EVENTO (casamento, festa infantil, cerimonial, decoração de festa) ou sobre PROJETO DE ARQUITETURA. Inclui orçamento, datas, "quero contratar", "vocês fazem X?", "tenho um casamento em maio", etc.
-• SUPPLIER: fornecedor falando sobre material, produto, entrega, NF, cobrança de fornecedor. Ex: "te mando o orçamento do buffet", "flores chegam terça", "logo da empresa pra arte"
-• TEAM: equipe/funcionário falando sobre trabalho operacional ("estou indo", "balde de roupa", "tinta", coisa do dia a dia da casa/escritório)
-• FAMILY: família/amigos. Conversa pessoal, sem assunto profissional. "tudo bem?", "café?", "saudades", emoji solto, conversa íntima.
-• PARTNER: outro profissional, imprensa, indicação, parceria, fotógrafo, arquiteto colega.
-• OTHER: vendedor, propaganda, mensagem em massa (broadcast), spam, mensagem que parece veio por engano, sem contexto claro.
+• CLIENT: cliente em potencial buscando serviço (evento ou arquitetura). Sinais:
+  - "queria saber sobre casamento", "quanto custa decoração de festa infantil"
+  - "vocês fazem cerimonial?", "tô pensando em fazer um aniversário"
+  - "preciso de um arquiteto pra reforma", "quero fazer um projeto"
+  - "mandei mensagem pelo Instagram, queria orçamento"
+  - "minha filha vai fazer 15 anos"
+
+• SUPPLIER: fornecedor de material/serviço PRA o Jean (não cliente). Sinais:
+  - "te mando o orçamento do buffet/flores/gráfica/decoração"
+  - "flores chegam terça", "tubete rosa que sobrou", "preciso entregar encomendas"
+  - "preciso da logo de vocês pra arte", "manda o CNPJ"
+  - "tenho material pra entregar", "estou subindo pra entrega"
+  - "a tinta já chegou", "o serralheiro tá aqui"
+  - palavras-chave: entregar, entrega, encomenda, NF, nota fiscal, orçamento (vindo deles), prazo de entrega, material, fornecedor
+
+• TEAM: equipe/funcionário/auxiliar do Jean. Sinais:
+  - tom íntimo de subordinado/colega de trabalho operacional
+  - "estou indo aí", "coloca o balde de roupa", "vou comprar tinta", "buscar no atacadão"
+  - tarefas domésticas/operacionais sem ar comercial
+  - mensagens curtas tipo "ja vou ai", "to terminando aqui"
+
+• FAMILY: família ou amigo pessoal. Sinais:
+  - tom íntimo, sem assunto profissional
+  - "tudo bem?", "café?", "saudades", "bjs", emoji puro, mensagem afetuosa
+  - "a mãe vai no mercado", "a vó ligou", coisas familiares
+  - "vamos almoçar?", "te amo"
+
+• PARTNER: outro profissional, imprensa, indicação, parceria. Sinais:
+  - "sou jornalista da X, queria entrevistar"
+  - "sou arquiteto também, queria trocar ideia"
+  - "fulano me indicou seu contato pra parceria"
+  - "queria fazer uma colab"
+
+• OTHER: vendedor, propaganda, mass-broadcast, spam, mensagem fora de contexto. Sinais:
+  - oferta genérica de produto que não tem nada a ver
+  - "🌸✨ PROMOÇÃO DIA DAS MÃES" (broadcast comercial)
+  - Mensagem totalmente desconexa
+  - Cumprimento puro sem contexto ("oi", "bom dia") — fica OTHER low até ele se manifestar
+
+REGRAS:
+1. Em DÚVIDA entre CLIENT e outra categoria → prefira a outra. CLIENT só com sinal CLARO de buscar serviço.
+2. "preciso entregar X pro Jean" / "tenho X pra ele" / "trazer X" → SUPPLIER high (tá entregando algo pra ele, não cliente)
+3. "o Jean tá aí?" / "ele atende?" sozinho → OTHER low (ambíguo, pode ser qualquer um)
+4. Mensagem curta sem contexto → low confidence em qualquer categoria que escolher
 
 Retorne JSON estrito:
 {
   "category": "CLIENT" | "SUPPLIER" | "TEAM" | "FAMILY" | "PARTNER" | "OTHER",
   "confidence": "high" | "low",
   "reason": "1 frase curta explicando"
-}
-
-Em caso de DÚVIDA entre CLIENT e qualquer outra: prefira a OUTRA. CLIENT só quando há sinal CLARO de busca por serviço (evento ou projeto arquitetura).
-Mensagens curtas tipo "oi", "bom dia" sem contexto: confidence "low" + categorize como OTHER (não assume cliente).`,
+}`,
       contents: [
         {
           role: "user",

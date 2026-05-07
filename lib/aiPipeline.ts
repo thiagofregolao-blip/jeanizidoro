@@ -420,9 +420,10 @@ export async function processInboundMessage(args: {
 
     detectedIntent = { category: intent.category, reason: intent.reason };
 
-    // Se mudou de CLIENT pra outra categoria, marca o Lead anterior como FINISHED
-    // (preserva histórico mas tira do funil de venda)
-    if (intent.category !== "CLIENT" && activeLead) {
+    // Se mudou de CLIENT pra outra categoria COM CERTEZA (high confidence),
+    // marca o Lead anterior como FINISHED. Low confidence não muda nada
+    // pra evitar tirar Lead da aba certa por engano.
+    if (intent.category !== "CLIENT" && intent.confidence === "high" && activeLead) {
       await prisma.lead.update({
         where: { id: activeLead.id },
         data: { status: "FINISHED" },
@@ -430,8 +431,8 @@ export async function processInboundMessage(args: {
       console.log(`[PIPELINE] activeLead marcado como FINISHED (categoria mudou pra ${intent.category})`);
     }
 
-    // Avisa o Jean por WhatsApp se for não-CLIENT (mas Marina segue pra responder naturalmente abaixo)
-    if (intent.category !== "CLIENT") {
+    // Avisa o Jean por WhatsApp APENAS quando confidence=high (evita ruído)
+    if (intent.category !== "CLIENT" && intent.confidence === "high") {
       const categoryLabels: Record<string, string> = {
         SUPPLIER: "fornecedor",
         TEAM: "equipe/funcionário",
