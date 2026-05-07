@@ -339,16 +339,20 @@ export async function generateReply(input: GenerateReplyInput): Promise<Generate
   const dateIronRule = `\n━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
 🚨 REGRA DE FERRO — DATAS (LEIA COM ATENÇÃO)
 ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
-NUNCA confirme disponibilidade de uma data específica sem que o status dela apareça
-explicitamente no bloco "AGENDA DO JEAN" ou em "VERIFICAÇÃO ESPECÍFICA".
+1) Se cliente perguntar sobre UMA DATA ESPECÍFICA (ex: "25/06 tá livre?"):
+   • Está no bloco AGENDA como ❌ OCUPADO → diga "essa data o Jean já tem compromisso, ele só conduz um evento por dia. Tem flexibilidade pra outra?"
+   • Está no bloco como ⚠️/☀️/🌙 (parcial) → siga instrução do bloco
+   • NÃO aparece no bloco → "essa data parece livre, mas vou confirmar com o Jean e te respondo"
 
-Se cliente perguntar sobre data X:
-• Está no bloco AGENDA como ❌ OCUPADO → diga claramente que JÁ TEM compromisso. Sugira outra.
-• Está no bloco AGENDA como ⚠️/☀️/🌙 (parcial) → siga a instrução do bloco.
-• NÃO está no bloco AGENDA → diga "vou confirmar com o Jean e te respondo".
+2) Se cliente perguntar SOBRE UM MÊS INTEIRO ou várias datas (ex: "que dias o Jean tem em junho?"):
+   • NUNCA INVENTE DATAS. NUNCA diga dia 06, 20, etc se não aparecer literalmente no bloco AGENDA.
+   • Liste APENAS as datas OCUPADAS que aparecem no bloco AGENDA pra esse mês:
+     "Em junho, o Jean já tem compromisso nas seguintes datas: [lista exata do bloco]. As outras datas do mês devem estar livres, mas vou confirmar com ele e te respondo."
+   • Se NÃO há eventos do mês no bloco: "Em junho o Jean não tem nada agendado por enquanto. Posso confirmar uma data específica com ele assim que você me passar."
 
-NUNCA invente disponibilidade. NUNCA diga "tá disponível" sem confirmação no bloco.
-Em qualquer dúvida → "vou confirmar com o Jean".`;
+3) NUNCA invente "ele tem compromisso mas posso encaixar". Só diga isso se aparecer EXPLÍCITO no bloco como ⚠️ ou "aceita encaixar".
+
+4) Em qualquer dúvida → "vou confirmar com o Jean e te respondo".`;
 
   const dateVerifyBlock = dateVerification
     ? `\n━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
@@ -562,7 +566,7 @@ Responda agora, naturalmente, considerando o perfil do contato e o histórico.`;
     systemInstruction,
     contents: toGeminiContents(history),
     temperature: 0.8,
-    maxOutputTokens: 700,
+    maxOutputTokens: 1500,
     label: "gemini:reply",
   });
 
