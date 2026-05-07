@@ -84,7 +84,7 @@ export type MeetingProposal = {
   time: string;   // "HH:mm"
 };
 
-export type IntentCategory = "CLIENT" | "SUPPLIER" | "TEAM" | "PERSONAL" | "PARTNER" | "OTHER";
+export type IntentCategory = "CLIENT" | "SUPPLIER" | "TEAM" | "FAMILY" | "PARTNER" | "OTHER";
 
 export type IntentResult = {
   category: IntentCategory;
@@ -118,13 +118,13 @@ Categorias:
 • CLIENT: cliente em potencial perguntando sobre EVENTO (casamento, festa infantil, cerimonial, decoração de festa) ou sobre PROJETO DE ARQUITETURA. Inclui orçamento, datas, "quero contratar", "vocês fazem X?", "tenho um casamento em maio", etc.
 • SUPPLIER: fornecedor falando sobre material, produto, entrega, NF, cobrança de fornecedor. Ex: "te mando o orçamento do buffet", "flores chegam terça", "logo da empresa pra arte"
 • TEAM: equipe/funcionário falando sobre trabalho operacional ("estou indo", "balde de roupa", "tinta", coisa do dia a dia da casa/escritório)
-• PERSONAL: família/amigos. Conversa pessoal, sem assunto profissional. "tudo bem?", "café?", "saudades", emoji solto, conversa íntima.
+• FAMILY: família/amigos. Conversa pessoal, sem assunto profissional. "tudo bem?", "café?", "saudades", emoji solto, conversa íntima.
 • PARTNER: outro profissional, imprensa, indicação, parceria, fotógrafo, arquiteto colega.
 • OTHER: vendedor, propaganda, mensagem em massa (broadcast), spam, mensagem que parece veio por engano, sem contexto claro.
 
 Retorne JSON estrito:
 {
-  "category": "CLIENT" | "SUPPLIER" | "TEAM" | "PERSONAL" | "PARTNER" | "OTHER",
+  "category": "CLIENT" | "SUPPLIER" | "TEAM" | "FAMILY" | "PARTNER" | "OTHER",
   "confidence": "high" | "low",
   "reason": "1 frase curta explicando"
 }

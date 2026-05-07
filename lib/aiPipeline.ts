@@ -400,6 +400,25 @@ export async function processInboundMessage(args: {
     });
     console.log(`[PIPELINE] intent=${intent.category} confidence=${intent.confidence} reason="${intent.reason}"`);
 
+    // Persiste categoria no Contact pra Marina virar secretária organizadora.
+    // Regras:
+    // - Se Jean travou manualmente (categoryLockedByJean), NÃO sobrescreve
+    // - Só atualiza se confidence high (evita ruído de mensagens ambíguas)
+    // - Se categoria mudou de uma high-confidence anterior pra outra high-confidence,
+    //   atualiza (cobre caso "amigo agora quer fazer evento" → vira CLIENT)
+    if (!contact.categoryLockedByJean && intent.confidence === "high") {
+      await prisma.contact.update({
+        where: { id: contact.id },
+        data: {
+          category: intent.category,
+          categoryConfidence: intent.confidence,
+          categoryReason: intent.reason,
+          categoryUpdatedAt: new Date(),
+        },
+      });
+      console.log(`[PIPELINE] contact category updated to ${intent.category}`);
+    }
+
     if (intent.category !== "CLIENT") {
       // Escalação automática — Marina não responde, só avisa que vai repassar e alerta o Jean
       const escalationMsg = `Oi! Eu sou a Marina, atendente virtual do Jean Izidoro 💫 Vou repassar sua mensagem pra ele e ele te responde pessoalmente assim que possível.`;

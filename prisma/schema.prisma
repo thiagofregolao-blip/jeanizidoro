@@ -22,21 +22,38 @@ enum Role {
 
 model Contact {
   id            String         @id @default(cuid())
-  phone         String         @unique
-  name          String?
-  email         String?
-  isVip         Boolean        @default(false)
-  notes         String?
-  profile       Json?
-  tone          String?
-  firstMsgAt    DateTime?
-  lastSeenAt    DateTime?
-  conversations Conversation[]
-  leads         Lead[]
-  contracts     Contract[]
-  appointments  Appointment[]
-  createdAt     DateTime       @default(now())
-  updatedAt     DateTime       @updatedAt
+  phone               String           @unique
+  name                String?
+  email               String?
+  isVip               Boolean          @default(false)
+  notes               String?
+  profile             Json?
+  tone                String?
+  category            ContactCategory  @default(UNKNOWN)
+  categoryConfidence  String?          // "high" | "low"
+  categoryReason      String?          @db.Text
+  categoryUpdatedAt   DateTime?
+  categoryLockedByJean Boolean         @default(false)
+  firstMsgAt          DateTime?
+  lastSeenAt          DateTime?
+  conversations       Conversation[]
+  leads               Lead[]
+  contracts           Contract[]
+  appointments        Appointment[]
+  createdAt           DateTime         @default(now())
+  updatedAt           DateTime         @updatedAt
+
+  @@index([category])
+}
+
+enum ContactCategory {
+  UNKNOWN     // ainda não classificado (primeira interação, aguardando contexto)
+  CLIENT      // cliente de evento ou arquitetura
+  SUPPLIER    // fornecedor
+  TEAM        // equipe/funcionário
+  FAMILY      // família/amigos pessoais
+  PARTNER     // parceiros/imprensa/colegas profissionais
+  OTHER       // spam, propaganda, mensagens fora de contexto
 }
 
 model Appointment {
