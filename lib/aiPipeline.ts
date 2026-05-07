@@ -391,7 +391,11 @@ export async function processInboundMessage(args: {
     },
   });
 
-  if (!activeLead && !isFirstInteraction) {
+  // Re-classifica em TODA mensagem que não seja a primeira interação.
+  // Isso permite Marina detectar mudança de tema (cliente que vira fornecedor,
+  // amigo que agora quer evento, etc) e atualizar a categoria do contato.
+  // Categoria locked pelo Jean nunca é sobrescrita.
+  if (!isFirstInteraction && !contact.categoryLockedByJean) {
     const recentTexts = formatted.slice(-5).map((m) => `${m.role === "user" ? "Cliente" : "Marina"}: ${m.content}`);
     const intent = await classifyIntent({
       text,
@@ -400,13 +404,8 @@ export async function processInboundMessage(args: {
     });
     console.log(`[PIPELINE] intent=${intent.category} confidence=${intent.confidence} reason="${intent.reason}"`);
 
-    // Persiste categoria no Contact pra Marina virar secretária organizadora.
-    // Regras:
-    // - Se Jean travou manualmente (categoryLockedByJean), NÃO sobrescreve
-    // - Só atualiza se confidence high (evita ruído de mensagens ambíguas)
-    // - Se categoria mudou de uma high-confidence anterior pra outra high-confidence,
-    //   atualiza (cobre caso "amigo agora quer fazer evento" → vira CLIENT)
-    if (!contact.categoryLockedByJean && intent.confidence === "high") {
+    // Atualiza categoria no Contact apenas se confidence high (evita ruído)
+    if (intent.confidence === "high") {
       await prisma.contact.update({
         where: { id: contact.id },
         data: {
@@ -420,7 +419,16 @@ export async function processInboundMessage(args: {
     }
 
     if (intent.category !== "CLIENT") {
-      // Escalação automática — Marina não responde, só avisa que vai repassar e alerta o Jean
+      // Se havia Lead ativo criado por engano em msg anterior, marca como FINISHED
+      // (não apaga pra preservar histórico, mas tira do funil de venda)
+      if (activeLead) {
+        await prisma.lead.update({
+          where: { id: activeLead.id },
+          data: { status: "FINISHED" },
+        });
+        console.log(`[PIPELINE] activeLead marcado como FINISHED (categoria mudou pra ${intent.category})`);
+      }
+
       const escalationMsg = `Oi! Eu sou a Marina, atendente virtual do Jean Izidoro 💫 Vou repassar sua mensagem pra ele e ele te responde pessoalmente assim que possível.`;
       try {
         await sendChunksSafely(phone, [escalationMsg], conv.id);
@@ -430,7 +438,7 @@ export async function processInboundMessage(args: {
       const categoryLabels: Record<string, string> = {
         SUPPLIER: "fornecedor",
         TEAM: "equipe/funcionário",
-        PERSONAL: "pessoal/família",
+        FAMILY: "família/amigo",
         PARTNER: "parceiro/imprensa",
         OTHER: "não-classificada",
       };
@@ -592,7 +600,16 @@ export async function processInboundMessage(args: {
   // sucesso → reset contador do breaker
   await resetCircuitSuccess();
 
-  // 10. classify + profile + dossier update (SÍNCRONO pra Kanban + próxima resposta)
+  // 10. classify + profile + dossier update (só roda quando contato é CLIENT)
+  // Re-busca contact pra ter categoria atualizada (pode ter sido alterada acima)
+  const refreshedContact = await prisma.contact.findUnique({ where: { id: contact.id } });
+  const isClientContact = !refreshedContact?.category || refreshedContact.category === "UNKNOWN" || refreshedContact.category === "CLIENT";
+
+  if (!isClientContact) {
+    console.log(`[PIPELINE] skip classifyLead — categoria=${refreshedContact?.category} (não é CLIENT)`);
+    return { ok: true, replied: true, meetingProposed };
+  }
+
   try {
     console.log(`[PIPELINE] classifying + updating dossier`);
     // Pega últimas 10 msgs pra resumo (mais barato que histórico inteiro)

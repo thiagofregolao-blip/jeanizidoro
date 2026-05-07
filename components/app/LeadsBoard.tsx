@@ -135,13 +135,18 @@ export default function LeadsBoard() {
 
   const refresh = useCallback(async () => {
     setLoading(true);
-    if (mainTab === "EVENTS") {
-      await loadLeads();
-    } else {
-      const cat = MAIN_TABS.find((t) => t.key === mainTab)?.dropCategory;
-      if (cat) await loadCategory(cat);
+    try {
+      if (mainTab === "EVENTS") {
+        await loadLeads();
+      } else {
+        const cat = MAIN_TABS.find((t) => t.key === mainTab)?.dropCategory;
+        if (cat) await loadCategory(cat);
+      }
+    } catch (e) {
+      console.error("LeadsBoard refresh failed", e);
+    } finally {
+      setLoading(false);
     }
-    setLoading(false);
   }, [mainTab, loadLeads, loadCategory]);
 
   useEffect(() => {
