@@ -82,6 +82,79 @@ export type MeetingProposal = {
   time: string;   // "HH:mm"
 };
 
+export type IntentCategory = "CLIENT" | "SUPPLIER" | "TEAM" | "PERSONAL" | "PARTNER" | "OTHER";
+
+export type IntentResult = {
+  category: IntentCategory;
+  confidence: "high" | "low";
+  reason: string;
+};
+
+/**
+ * Classifica a INTENÇÃO da mensagem antes da Marina responder.
+ * Roda apenas quando contato NÃO tem Lead ativo (cliente já confirmado pula isso).
+ * Custa ~100 tokens em Flash-Lite — rápido e barato.
+ */
+export async function classifyIntent(args: {
+  text: string;
+  recentMessages?: string[];
+  contactName?: string | null;
+}): Promise<IntentResult> {
+  const { text, recentMessages = [], contactName } = args;
+  const recent = recentMessages.length > 0
+    ? `\n\nÚltimas mensagens nesta conversa:\n${recentMessages.slice(-5).join("\n")}`
+    : "";
+
+  try {
+    const txt = await geminiText({
+      model: FLASH_LITE,
+      systemInstruction: `Você classifica mensagens recebidas no WhatsApp do Jean Izidoro (arquiteto e produtor de eventos).
+
+Jean recebe mensagens de TODO TIPO de pessoa. Sua tarefa é categorizar quem está mandando.
+
+Categorias:
+• CLIENT: cliente em potencial perguntando sobre EVENTO (casamento, festa infantil, cerimonial, decoração de festa) ou sobre PROJETO DE ARQUITETURA. Inclui orçamento, datas, "quero contratar", "vocês fazem X?", "tenho um casamento em maio", etc.
+• SUPPLIER: fornecedor falando sobre material, produto, entrega, NF, cobrança de fornecedor. Ex: "te mando o orçamento do buffet", "flores chegam terça", "logo da empresa pra arte"
+• TEAM: equipe/funcionário falando sobre trabalho operacional ("estou indo", "balde de roupa", "tinta", coisa do dia a dia da casa/escritório)
+• PERSONAL: família/amigos. Conversa pessoal, sem assunto profissional. "tudo bem?", "café?", "saudades", emoji solto, conversa íntima.
+• PARTNER: outro profissional, imprensa, indicação, parceria, fotógrafo, arquiteto colega.
+• OTHER: vendedor, propaganda, mensagem em massa (broadcast), spam, mensagem que parece veio por engano, sem contexto claro.
+
+Retorne JSON estrito:
+{
+  "category": "CLIENT" | "SUPPLIER" | "TEAM" | "PERSONAL" | "PARTNER" | "OTHER",
+  "confidence": "high" | "low",
+  "reason": "1 frase curta explicando"
+}
+
+Em caso de DÚVIDA entre CLIENT e qualquer outra: prefira a OUTRA. CLIENT só quando há sinal CLARO de busca por serviço (evento ou projeto arquitetura).
+Mensagens curtas tipo "oi", "bom dia" sem contexto: confidence "low" + categorize como OTHER (não assume cliente).`,
+      contents: [
+        {
+          role: "user",
+          parts: [{
+            text: `Mensagem recebida${contactName ? ` de "${contactName}"` : ""}:\n"${text}"${recent}\n\nClassifique.`
+          }],
+        },
+      ],
+      maxOutputTokens: 200,
+      responseMimeType: "application/json",
+      label: "gemini:intent",
+    });
+    const cleaned = txt.replace(/```json\n?/g, "").replace(/```/g, "").trim();
+    const parsed = JSON.parse(cleaned);
+    return {
+      category: (parsed.category as IntentCategory) || "OTHER",
+      confidence: parsed.confidence === "high" ? "high" : "low",
+      reason: parsed.reason || "",
+    };
+  } catch (e) {
+    console.error("classifyIntent error", e);
+    // Em caso de erro, default seguro: trata como OTHER (não assume cliente)
+    return { category: "OTHER", confidence: "low", reason: "fallback (classifier error)" };
+  }
+}
+
 const CLASSIFY_SCHEMA = `
 {
   "temperature": "HOT" | "WARM" | "COLD",
@@ -295,7 +368,9 @@ Releia o DOSSIÊ pra entender em qual etapa parou. Envie 1-2 mensagens curtas, g
 
   const lastUserMsg = [...history].reverse().find((m) => m.role === "user")?.content || "";
 
-  const systemInstruction = `Você é Marina, atendente virtual do Jean Izidoro (arquiteto de eventos especialista em Decoração de Casamentos, Assessoria Cerimonial de Eventos e Decoração de Festas Infantis).
+  const systemInstruction = `Você é Marina, atendente virtual do Jean Izidoro — arquiteto formado, com atuação em DUAS frentes:
+1) EVENTOS: Decoração de Casamentos, Assessoria Cerimonial e Decoração de Festas Infantis
+2) ARQUITETURA: Projetos arquitetônicos (residencial/comercial)
 
 SUA MISSÃO: RESPONDER as perguntas do cliente. Você é uma assistente de INFORMAÇÃO — NÃO é vendedora. NÃO bate papo. NÃO puxa assunto. Se cliente perguntou X, você responde X. Ponto.
 

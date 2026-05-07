@@ -2,6 +2,7 @@ import { prisma } from "./prisma";
 import { sendText, setTyping } from "./zapi";
 import {
   classifyLead,
+  classifyIntent,
   generateReply,
   detectTone,
   extractProfileLearnings,
@@ -374,6 +375,47 @@ export async function processInboundMessage(args: {
   const resumeAfterHumanContext = hadHumanTakeover
     ? `\n⚠️ ATENÇÃO: o JEAN (dono do negócio) respondeu pessoalmente nesta conversa em ${conv.humanTakeoverAt?.toLocaleString("pt-BR", { timeZone: "America/Sao_Paulo" })}. Suas mensagens estão marcadas com [JEAN respondeu pessoalmente]. ANALISE O QUE ELE DISSE e continue a partir dali. NÃO repita informações que o Jean já passou. NÃO contradiga o que ele combinou. Se ele marcou uma reunião, você NÃO remarca. Se ele combinou valor, você NÃO fala de outro. Seu papel agora é COMPLEMENTAR o que o Jean já fez.`
     : "";
+
+  // 6.5 detector de intenção: se contato NÃO tem Lead ativo, classifica antes de responder
+  // Marina só atende CLIENTE (CLIENT). Outras categorias → escalação automática pro Jean.
+  const activeLead = await prisma.lead.findFirst({
+    where: {
+      conversationId: conv.id,
+      status: { notIn: ["WON", "LOST", "FINISHED"] },
+    },
+  });
+
+  if (!activeLead) {
+    const recentTexts = formatted.slice(-5).map((m) => `${m.role === "user" ? "Cliente" : "Marina"}: ${m.content}`);
+    const intent = await classifyIntent({
+      text,
+      recentMessages: recentTexts,
+      contactName: contact.name,
+    });
+    console.log(`[PIPELINE] intent=${intent.category} confidence=${intent.confidence} reason="${intent.reason}"`);
+
+    if (intent.category !== "CLIENT") {
+      // Escalação automática — Marina não responde, só avisa que vai repassar e alerta o Jean
+      const escalationMsg = `Oi! Eu sou a Marina, atendente virtual do Jean Izidoro 💫 Vou repassar sua mensagem pra ele e ele te responde pessoalmente assim que possível.`;
+      try {
+        await sendChunksSafely(phone, [escalationMsg], conv.id);
+      } catch (e) {
+        console.error("[PIPELINE] escalation send failed", e);
+      }
+      const categoryLabels: Record<string, string> = {
+        SUPPLIER: "fornecedor",
+        TEAM: "equipe/funcionário",
+        PERSONAL: "pessoal/família",
+        PARTNER: "parceiro/imprensa",
+        OTHER: "não-classificada",
+      };
+      await alertOwner(
+        `📩 Mensagem ${categoryLabels[intent.category] || intent.category} de ${contact.name || phone}: "${text.slice(0, 120)}"\n\nMarina avisou que vai repassar. Responde quando puder no painel.`
+      );
+      console.log(`[PIPELINE] non-client intent, escalated to Jean`);
+      return { skipped: "non_client_intent", intent: intent.category };
+    }
+  }
 
   // 7. initial micro-delay
   await sleep(rand(2000, 5000));
