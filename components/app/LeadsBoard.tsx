@@ -83,6 +83,26 @@ export default function LeadsBoard() {
   const [openLead, setOpenLead] = useState<Lead | null>(null);
   const [newAttendOpen, setNewAttendOpen] = useState(false);
   const [finishingId, setFinishingId] = useState<string | null>(null);
+  const [resettingId, setResettingId] = useState<string | null>(null);
+
+  async function resetLead(l: Lead) {
+    if (
+      !confirm(
+        `RESETAR atendimento de ${l.contact.name || formatPhone(l.contact.phone)}?\n\n⚠️ ATENÇÃO: isso APAGA todas as mensagens, o lead, dossiê e perfil.\nO contato fica salvo, mas Marina vai tratá-lo como cliente NOVO na próxima mensagem.\n\nUse pra testar atendimento do zero. Não dá pra desfazer.`
+      )
+    )
+      return;
+    setResettingId(l.id);
+    try {
+      const res = await fetch(`/api/leads/${l.id}/reset`, { method: "POST" });
+      if (!res.ok) throw new Error("falhou");
+      await load();
+    } catch {
+      alert("Erro ao resetar. Tenta de novo.");
+    } finally {
+      setResettingId(null);
+    }
+  }
 
   async function finishLead(l: Lead) {
     if (!confirm(`Finalizar atendimento de ${l.contact.name || formatPhone(l.contact.phone)}?\n\nO lead vai pra aba "Finalizados". A IA continua respondendo normalmente.`)) return;
@@ -353,6 +373,14 @@ export default function LeadsBoard() {
                         {finishingId === l.id ? "..." : "🏁 Finalizar"}
                       </button>
                     )}
+                    <button
+                      onClick={() => resetLead(l)}
+                      disabled={resettingId === l.id}
+                      title="Resetar atendimento — apaga tudo, cliente vira novo (uso pra testes)"
+                      className="text-xs uppercase tracking-[0.2em] border border-red-500/30 text-red-400/80 hover:bg-red-500/10 hover:border-red-500/60 px-3 py-2 transition-colors whitespace-nowrap disabled:opacity-50"
+                    >
+                      {resettingId === l.id ? "..." : "🔄 Resetar"}
+                    </button>
                   </div>
 
                   {/* Resumo (só mobile ou em largura reduzida) */}
