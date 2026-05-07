@@ -392,9 +392,10 @@ export async function processInboundMessage(args: {
   });
 
   // Re-classifica em TODA mensagem que não seja a primeira interação.
-  // Isso permite Marina detectar mudança de tema (cliente que vira fornecedor,
-  // amigo que agora quer evento, etc) e atualizar a categoria do contato.
-  // Categoria locked pelo Jean nunca é sobrescrita.
+  // Marina vai responder NATURALMENTE em qualquer caso — a categoria é só pra
+  // (a) atualizar a aba do painel e (b) dar contexto pro tom da resposta.
+  // Categoria locked pelo Jean nunca é sobrescrita pela Marina.
+  let detectedIntent: { category: "CLIENT" | "SUPPLIER" | "TEAM" | "FAMILY" | "PARTNER" | "OTHER"; reason: string } | null = null;
   if (!isFirstInteraction && !contact.categoryLockedByJean) {
     const recentTexts = formatted.slice(-5).map((m) => `${m.role === "user" ? "Cliente" : "Marina"}: ${m.content}`);
     const intent = await classifyIntent({
@@ -404,7 +405,6 @@ export async function processInboundMessage(args: {
     });
     console.log(`[PIPELINE] intent=${intent.category} confidence=${intent.confidence} reason="${intent.reason}"`);
 
-    // Atualiza categoria no Contact apenas se confidence high (evita ruído)
     if (intent.confidence === "high") {
       await prisma.contact.update({
         where: { id: contact.id },
@@ -418,23 +418,20 @@ export async function processInboundMessage(args: {
       console.log(`[PIPELINE] contact category updated to ${intent.category}`);
     }
 
-    if (intent.category !== "CLIENT") {
-      // Se havia Lead ativo criado por engano em msg anterior, marca como FINISHED
-      // (não apaga pra preservar histórico, mas tira do funil de venda)
-      if (activeLead) {
-        await prisma.lead.update({
-          where: { id: activeLead.id },
-          data: { status: "FINISHED" },
-        });
-        console.log(`[PIPELINE] activeLead marcado como FINISHED (categoria mudou pra ${intent.category})`);
-      }
+    detectedIntent = { category: intent.category, reason: intent.reason };
 
-      const escalationMsg = `Oi! Eu sou a Marina, atendente virtual do Jean Izidoro 💫 Vou repassar sua mensagem pra ele e ele te responde pessoalmente assim que possível.`;
-      try {
-        await sendChunksSafely(phone, [escalationMsg], conv.id);
-      } catch (e) {
-        console.error("[PIPELINE] escalation send failed", e);
-      }
+    // Se mudou de CLIENT pra outra categoria, marca o Lead anterior como FINISHED
+    // (preserva histórico mas tira do funil de venda)
+    if (intent.category !== "CLIENT" && activeLead) {
+      await prisma.lead.update({
+        where: { id: activeLead.id },
+        data: { status: "FINISHED" },
+      });
+      console.log(`[PIPELINE] activeLead marcado como FINISHED (categoria mudou pra ${intent.category})`);
+    }
+
+    // Avisa o Jean por WhatsApp se for não-CLIENT (mas Marina segue pra responder naturalmente abaixo)
+    if (intent.category !== "CLIENT") {
       const categoryLabels: Record<string, string> = {
         SUPPLIER: "fornecedor",
         TEAM: "equipe/funcionário",
@@ -442,11 +439,9 @@ export async function processInboundMessage(args: {
         PARTNER: "parceiro/imprensa",
         OTHER: "não-classificada",
       };
-      await alertOwner(
-        `📩 Mensagem ${categoryLabels[intent.category] || intent.category} de ${contact.name || phone}: "${text.slice(0, 120)}"\n\nMarina avisou que vai repassar. Responde quando puder no painel.`
-      );
-      console.log(`[PIPELINE] non-client intent, escalated to Jean`);
-      return { skipped: "non_client_intent", intent: intent.category };
+      alertOwner(
+        `📩 Mensagem ${categoryLabels[intent.category] || intent.category} de ${contact.name || phone}: "${text.slice(0, 120)}"`
+      ).catch(() => {});
     }
   }
 
@@ -496,6 +491,10 @@ export async function processInboundMessage(args: {
       dateVerification,
       meetingSlotsContext,
       hasActiveClient: !!activeLead,
+      contactCategory: (detectedIntent?.category as "CLIENT" | "SUPPLIER" | "TEAM" | "FAMILY" | "PARTNER" | "OTHER" | undefined)
+        || (contact.category as "UNKNOWN" | "CLIENT" | "SUPPLIER" | "TEAM" | "FAMILY" | "PARTNER" | "OTHER")
+        || "UNKNOWN",
+      contactCategoryReason: detectedIntent?.reason || contact.categoryReason || null,
       humanTakeoverContext: resumeAfterHumanContext,
       leadDossier,
       attendCode,
