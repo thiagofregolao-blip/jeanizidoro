@@ -252,6 +252,7 @@ type GenerateReplyInput = {
   attendCode?: string | null;
   hasInspiration?: boolean;
   mode?: "normal" | "followup";
+  hasActiveClient?: boolean;
 };
 
 export type GenerateReplyOutput = {
@@ -276,6 +277,7 @@ export async function generateReply(input: GenerateReplyInput): Promise<Generate
     attendCode = null,
     hasInspiration = false,
     mode = "normal",
+    hasActiveClient = false,
   } = input;
 
   const dossierBlock = leadDossier
@@ -423,8 +425,10 @@ SUA MISSÃO: RESPONDER as perguntas do cliente. Você é uma assistente de INFOR
 
 🚫 **NUNCA promete serviço fora do escopo** (decoração casamento / cerimonial / festa infantil)
 
-🚫 **SE A MENSAGEM DO CLIENTE NÃO PARECE DESTINADA AO JEAN** (ex: parece B2B errado, fornecedor, mensagem de spam, propaganda) — responda APENAS: "Oi! Acho que essa mensagem veio aqui por engano — sou a atendente virtual do Jean Izidoro, arquiteto de eventos. Posso ajudar com algo de decoração ou cerimonial?"
-   NUNCA finja entender o assunto. NUNCA diga "Combinado, vou preparar!" pra alguém que não é cliente seu.
+${hasActiveClient
+    ? `\n💼 **VOCÊ ESTÁ ATENDENDO UM CLIENTE ATIVO.** Esse contato JÁ tem atendimento aberto pra um evento. Confie no contexto e responda normal — NÃO assuma que mensagem fora do tema é "engano".\n   Ex: cliente diz "preciso enviar as flores" → pode ser do evento dele. Pergunte mais ou repasse pro Jean ("vou alinhar com o Jean").`
+    : `\n🚫 **SE A MENSAGEM NÃO PARECE DESTINADA AO JEAN** (ex: parece B2B, fornecedor, propaganda) — responda APENAS: "Oi! Acho que essa mensagem veio aqui por engano — sou a atendente virtual do Jean Izidoro, arquiteto de eventos. Posso ajudar com algo de decoração ou cerimonial?"
+   NUNCA finja entender o assunto. NUNCA diga "Combinado, vou preparar!" pra alguém que não é cliente seu.`}
 
 ═══ QUANDO PERGUNTAR (qualificação) ═══
 Pergunta APENAS se faltar info CRÍTICA pra avançar:
@@ -441,55 +445,47 @@ ${persona}
 ${businessContext}
 ${dossierBlock}${calendarBlock}${dateIronRule}${dateVerifyBlock}${meetingSlotsBlock}${memoryBlock}${timeContext}${humanTakeoverContext}${firstInteractionNote}${inspirationNote}${weekendRule}${followupBlock}
 
-═══ FORMATO DA RESPOSTA (JSON OBRIGATÓRIO) ═══
-Retorne JSON estrito:
-{
-  "reply": "msg1||msg2||msg3",
-  "meetingProposed": { "date": "YYYY-MM-DD", "time": "HH:mm" } OU null
-}
+═══ FORMATO DA RESPOSTA — TEXTO PURO ═══
+Responda em TEXTO PURO. Se quiser quebrar em 2 mensagens, separe com ||
+NÃO retorne JSON. NÃO use chaves {}. NÃO use "reply":. Apenas o texto.
 
-"meetingProposed" só preenche se o cliente CONFIRMOU explicitamente um horário de reunião (de uma das opções dos HORÁRIOS DISPONÍVEIS). Em qualquer outra resposta, deixe null.
+Se cliente CONFIRMOU explicitamente um horário de reunião (de uma das opções dos HORÁRIOS DISPONÍVEIS), adicione NO FINAL da resposta, em linha separada:
+[REUNIAO:YYYY-MM-DD HH:mm]
+
+Exemplo:
+"Beleza! Vou alinhar com o Jean e te confirmo já já 💫
+[REUNIAO:2026-05-12 15:00]"
+
+Em qualquer outra resposta, NÃO inclua o marcador [REUNIAO:...].
 
 ═══ FOCO AGORA ═══
 A ÚLTIMA MENSAGEM DO CLIENTE É: "${lastUserMsg}"`;
 
-  const txt = await geminiText({
+  let replyTxt = await geminiText({
     model: FLASH,
     systemInstruction,
     contents: toGeminiContents(history),
     temperature: 0.8,
     maxOutputTokens: 700,
-    responseMimeType: "application/json",
     label: "gemini:reply",
   });
-  const cleaned = txt.replace(/```json\n?/g, "").replace(/```/g, "").trim();
 
-  let replyTxt = "";
+  // Limpa qualquer JSON acidental que Gemini ainda possa retornar
+  replyTxt = replyTxt
+    .replace(/```json\n?/g, "")
+    .replace(/```/g, "")
+    .replace(/^\s*\{[\s\S]*?"reply"\s*:\s*"/, "") // remove `{"reply": "` no início
+    .replace(/"\s*,\s*"meetingProposed"[\s\S]*\}\s*$/, "") // remove o fim do JSON
+    .replace(/^"|"$/g, "") // tira aspas de início/fim
+    .trim();
+
+  // Detecta marcador [REUNIAO:YYYY-MM-DD HH:mm] e remove do texto final
   let meetingProposed: MeetingProposal | null = null;
-
-  try {
-    const parsed = JSON.parse(cleaned) as { reply?: string; meetingProposed?: MeetingProposal | null };
-    replyTxt = parsed.reply || "";
-    meetingProposed =
-      parsed.meetingProposed && parsed.meetingProposed.date && parsed.meetingProposed.time
-        ? parsed.meetingProposed
-        : null;
-  } catch {
-    // JSON malformado — extrai reply via regex como fallback
-    console.warn("[gemini:reply] JSON inválido, fazendo extração resiliente");
-    // Tenta capturar o conteúdo do campo "reply": "..." mesmo com aspas/quebras dentro
-    const replyMatch = cleaned.match(/"reply"\s*:\s*"([\s\S]*?)"\s*(?:,|}|\n)/);
-    if (replyMatch) {
-      replyTxt = replyMatch[1].replace(/\\n/g, "\n").replace(/\\"/g, '"');
-    } else {
-      // Sem nem match — usa o texto bruto (limpo de chaves/aspas)
-      replyTxt = cleaned.replace(/^[{[]/, "").replace(/[}\]]$/, "").trim();
-    }
-    // tenta capturar meetingProposed também
-    const meetMatch = cleaned.match(/"meetingProposed"\s*:\s*\{\s*"date"\s*:\s*"([^"]+)"\s*,\s*"time"\s*:\s*"([^"]+)"/);
-    if (meetMatch) {
-      meetingProposed = { date: meetMatch[1], time: meetMatch[2] };
-    }
+  const meetMatch = replyTxt.match(/\[REUNIAO:\s*(\d{4}-\d{2}-\d{2})\s+(\d{1,2}:\d{2})\s*\]/i);
+  if (meetMatch) {
+    const time = meetMatch[2].length === 4 ? `0${meetMatch[2]}` : meetMatch[2];
+    meetingProposed = { date: meetMatch[1], time };
+    replyTxt = replyTxt.replace(/\[REUNIAO:[^\]]+\]/gi, "").trim();
   }
 
   const chunks = replyTxt

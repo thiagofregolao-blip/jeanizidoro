@@ -487,6 +487,7 @@ export async function processInboundMessage(args: {
       calendarContext,
       dateVerification,
       meetingSlotsContext,
+      hasActiveClient: !!activeLead,
       humanTakeoverContext: resumeAfterHumanContext,
       leadDossier,
       attendCode,
