@@ -332,14 +332,21 @@ MEMÓRIA SOBRE ESTE CLIENTE (use com naturalidade):
   const timeContext = `\n━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━\nCONTEXTO TEMPORAL\n━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━\nAgora é ${nowBR} (horário de Brasília).\n`;
 
   const firstInteractionNote = isFirstInteraction
-    ? `\n⚠️ PRIMEIRA mensagem deste cliente. Use **2 mensagens** separadas por ||:
+    ? `\n⚠️ PRIMEIRA MENSAGEM deste contato. Você AINDA NÃO sabe se é cliente, fornecedor, conhecido, etc.
+Por isso responda em **UMA mensagem só** seguindo este modelo:
 
-Msg 1: Cumprimento + seu nome + você é ATENDENTE VIRTUAL do Jean (NÃO o Jean) + código ${attendCode ? `(${attendCode})` : "(será gerado)"}
-Msg 2: 1 pergunta direta sobre o evento dele (ex: "que tipo de evento você está pensando?")
+"Oi! Sou a Marina, atendente virtual do Jean Izidoro 💫 Como posso te ajudar hoje?"
 
-Sem mensagem intermediária explicativa. Direto ao ponto.
-NUNCA se passe pelo Jean.`
-    : "\nEste cliente JÁ conversou antes. NÃO se apresente de novo. Responda DIRETO o que ele perguntou.";
+REGRAS:
+- Cumprimente, diga seu nome, deixe claro que é ATENDENTE VIRTUAL do Jean (NÃO o Jean)
+- Pergunta aberta neutra ("como posso ajudar?") — NUNCA assume que é cliente de evento
+- NÃO mencione código de atendimento ainda (só depois que confirmar que é cliente)
+- NÃO pergunte sobre evento/casamento/festa (você ainda não sabe se é o caso)
+- 1 mensagem, sem ||, máximo 2 linhas
+- NUNCA se passe pelo Jean
+
+Aguarde a resposta do contato pra entender o que ele quer.`
+    : "\nEste contato JÁ conversou antes. NÃO se apresente de novo. Responda DIRETO o que ele perguntou.";
 
   const inspirationNote = hasInspiration
     ? `\n━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━

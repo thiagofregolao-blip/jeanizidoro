@@ -176,8 +176,6 @@ export async function processInboundMessage(args: {
     },
   });
 
-  const isFirstInteraction = !existing;
-
   // 2. open conversation
   let conv = await prisma.conversation.findFirst({
     where: { contactId: contact.id, status: { not: "CLOSED" } },
@@ -186,6 +184,12 @@ export async function processInboundMessage(args: {
   if (!conv) {
     conv = await prisma.conversation.create({ data: { contactId: contact.id } });
   }
+
+  // detecta primeira interação ANTES de salvar a msg atual
+  // (cobre reset: contato existe mas conversa foi recriada)
+  const priorMsgCount = await prisma.message.count({ where: { conversationId: conv.id } });
+  const isFirstInteraction = priorMsgCount === 0;
+  void existing; // mantido só pra retrocompatibilidade do upsert
 
   // 3. save inbound
   await prisma.message.create({
@@ -378,6 +382,8 @@ export async function processInboundMessage(args: {
 
   // 6.5 detector de intenção: se contato NÃO tem Lead ativo, classifica antes de responder
   // Marina só atende CLIENTE (CLIENT). Outras categorias → escalação automática pro Jean.
+  // EXCEÇÃO: primeira interação NÃO classifica — Marina se apresenta e pergunta como ajudar,
+  // a partir da segunda mensagem aí sim classifica baseado no contexto que o cliente deu.
   const activeLead = await prisma.lead.findFirst({
     where: {
       conversationId: conv.id,
@@ -385,7 +391,7 @@ export async function processInboundMessage(args: {
     },
   });
 
-  if (!activeLead) {
+  if (!activeLead && !isFirstInteraction) {
     const recentTexts = formatted.slice(-5).map((m) => `${m.role === "user" ? "Cliente" : "Marina"}: ${m.content}`);
     const intent = await classifyIntent({
       text,
